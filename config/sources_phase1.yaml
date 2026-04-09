@@ -203,5 +203,6 @@ sources:
     name: ASP Wrocław
     url: https://www.asp.wroc.pl/
     kind: generic_links
+    verify_ssl: false
     enabled: true
 

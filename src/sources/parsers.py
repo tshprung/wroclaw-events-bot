@@ -1,11 +1,18 @@
 from __future__ import annotations
 
+import json
 import re
+import unicodedata
+from datetime import datetime
 from typing import Callable
-from urllib.parse import urlparse
+from urllib.parse import quote, urlparse
+
+from dateutil import parser as dtparser
+from dateutil import tz as dttz
+from rapidfuzz.fuzz import token_sort_ratio
 
 from ..models import Event, Source
-from .common import extract_links
+from .common import extract_links, soup
 
 
 _SPACE = re.compile(r"\s+")
@@ -48,6 +55,100 @@ _NAV_ONLY_PATH_RE = re.compile(
 
 def _clean(s: str) -> str:
     return _SPACE.sub(" ", (s or "").strip())
+
+
+def _fold_match(s: str) -> str:
+    s = unicodedata.normalize("NFKD", (s or "").casefold())
+    return "".join(c for c in s if not unicodedata.combining(c))
+
+
+def _wroclaw_go_ld_rows(html: str) -> list[tuple[str, datetime, str | None]]:
+    """schema.org Event rows from application/ld+json (gives real startDate)."""
+    tzinfo = dttz.gettz("Europe/Warsaw") or dttz.tzlocal()
+    rows: list[tuple[str, datetime, str | None]] = []
+    for script in soup(html).select('script[type="application/ld+json"]'):
+        raw = (script.string or "").strip()
+        if not raw:
+            continue
+        try:
+            data = json.loads(raw)
+        except json.JSONDecodeError:
+            continue
+        objs = data if isinstance(data, list) else [data]
+        for item in objs:
+            if not isinstance(item, dict):
+                continue
+            typ = item.get("@type")
+            is_event = typ == "Event" or (isinstance(typ, list) and "Event" in typ)
+            if not is_event:
+                continue
+            name = _clean(item.get("name") or "")
+            sd = item.get("startDate")
+            if not name or not sd:
+                continue
+            try:
+                st = dtparser.isoparse(str(sd).replace("Z", "+00:00"))
+            except (ValueError, TypeError):
+                continue
+            if st.tzinfo is None:
+                st = st.replace(tzinfo=tzinfo)
+            else:
+                st = st.astimezone(tzinfo)
+            loc = item.get("location")
+            venue = None
+            if isinstance(loc, dict):
+                venue = _clean(loc.get("name") or "") or None
+            rows.append((name, st, venue))
+    return rows
+
+
+def _anchor_card_title(anchor_text: str) -> str:
+    t = _clean(anchor_text)
+    md = _LEADING_DMY_ANCHOR.match(t)
+    if md:
+        return _clean(md.group("rest"))
+    wm = _WROCLAW_GO_WHEN.search(t)
+    if wm:
+        return _clean(t[: wm.start()].strip())
+    return t
+
+
+def _dedupe_prefer_real_go_url(events: list[Event]) -> list[Event]:
+    """Prefer real /go/.../id slug URLs over synthetic listing#evt fragment keys."""
+    best: dict[tuple[str, str], Event] = {}
+    for e in events:
+        sk = e.start_at.isoformat() if e.start_at else ""
+        key = (_fold_match(e.title), sk)
+        cur = best.get(key)
+        if cur is None:
+            best[key] = e
+        elif "#evt-" in cur.url and "#evt-" not in e.url:
+            best[key] = e
+        elif "#evt-" not in cur.url:
+            best[key] = cur
+        else:
+            best[key] = e
+    return list(best.values())
+
+
+def _go_synthetic_detail_url(listing_base: str, name: str, st: datetime) -> str:
+    """Static HTML often lacks permalinks; fragment keeps URL unique for dedupe and messages."""
+    q = quote(f"{name}|{st.isoformat()}"[:220], safe="")
+    return f"{listing_base.rstrip('/')}#evt-{q}"
+
+
+def _best_url_for_ld_name(ld_name: str, cand: list[tuple[str, str]], used_urls: set[str]) -> str | None:
+    best_u: str | None = None
+    best_sc = 0
+    fn = _fold_match(ld_name)
+    for text, url in cand:
+        if url in used_urls:
+            continue
+        sc = token_sort_ratio(fn, _fold_match(_anchor_card_title(text)))
+        if sc > best_sc:
+            best_sc = sc
+            best_u = url
+    return best_u if best_sc >= 74 else None
 
 
 def _generic_link_keeps(text: str, url: str) -> bool:
@@ -120,25 +221,47 @@ def parse_generic_links(source: Source, html: str) -> list[Event]:
     return out
 
 
-_GO_EVENT_PATH = re.compile(r"/go/wydarzenia/wydarzenia/[^/]+/\d", re.IGNORECASE)
+# Detail URLs: /go/wydarzenia/<kategoria>/<id>-<slug> (numeric id). Category-only paths
+# are /go/wydarzenia/kino etc. with no id segment.
+_GO_EVENT_PATH = re.compile(r"/go/wydarzenia/[^/]+/\d+[-a-z0-9]", re.IGNORECASE)
 
 
 def parse_wroclaw_go(source: Source, html: str) -> list[Event]:
-    # Real event cards use /go/wydarzenia/wydarzenia/<kategoria>/<id>-<slug> — not nav/footer
-    # links that only mention /go/wydarzenia/. Scanning the first N generic <a href> hits mostly menus.
+    # Cards are hydrated in JSON-LD (startDate); visible HTML often has only a few <a> rows.
     links = extract_links(
         source.url,
         html,
-        selector="a[href*='/go/wydarzenia/wydarzenia/']",
-        limit=200,
+        selector="a[href*='/go/wydarzenia/']",
+        limit=400,
     )
+    cand = [(t, u) for t, u in links if _GO_EVENT_PATH.search(u) and t]
+    rows = _wroclaw_go_ld_rows(html)
+    used_urls: set[str] = set()
     out: list[Event] = []
-    for text, url in links:
-        if not _GO_EVENT_PATH.search(url):
+    for name, st, ven in rows:
+        hit = _best_url_for_ld_name(name, cand, used_urls)
+        if hit:
+            used_urls.add(hit)
+            url = hit
+        else:
+            url = _go_synthetic_detail_url(source.url, name, st)
+        out.append(
+            Event(
+                source_id=source.id,
+                title=name,
+                start_at=st,
+                venue=ven,
+                url=url,
+                raw_date_text=None,
+            )
+        )
+    for text, url in cand:
+        if url in used_urls:
             continue
-        out.append(_parse_wroclaw_go_anchor(source.id, text, url))
-    # Filter out empties
-    return [e for e in out if e.title]
+        ev = _parse_wroclaw_go_anchor(source.id, text, url)
+        if ev.title:
+            out.append(ev)
+    return _dedupe_prefer_real_go_url(out)
 
 
 # Start of the "when" chunk on wroclaw.pl/go listing anchors (often: Title WHEN ...optional venue...).
@@ -154,11 +277,31 @@ _WROCLAW_GO_AFTER_TIME_VENUE = re.compile(
 )
 
 
+# "09.04.2026 Nazwa wydarzenia …" (current wroclaw.pl/go card text)
+_LEADING_DMY_ANCHOR = re.compile(
+    r"^(?P<dmy>\d{1,2}\.\d{1,2}\.(?:\d{4}|\d{2}))\s+(?P<rest>.+)$",
+)
+
+
 def _parse_wroclaw_go_anchor(source_id: str, text: str, url: str) -> Event:
     text = _clean(text)
     title = text
     when_txt = None
     venue = None
+    md = _LEADING_DMY_ANCHOR.match(text)
+    if md:
+        dmy = _clean(md.group("dmy"))
+        rest = _clean(md.group("rest"))
+        title = rest
+        when_txt = dmy
+        tmo = re.search(r"\b(o\s*\d{1,2}\s*[:.]\s*\d{2})\b", rest, re.I)
+        if tmo:
+            when_txt = _clean(f"{dmy} {tmo.group(1)}")
+            tail_venue = rest[tmo.end() :].strip()
+            if tail_venue:
+                venue = _clean(tail_venue)
+        return Event(source_id=source_id, title=title, start_at=None, venue=venue, url=url, raw_date_text=when_txt)
+
     wm = _WROCLAW_GO_WHEN.search(text)
     if wm:
         title = _clean(text[: wm.start()].strip())

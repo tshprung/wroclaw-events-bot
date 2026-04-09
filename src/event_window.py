@@ -230,9 +230,8 @@ def load_window_options() -> tuple[int, bool]:
     days = int(os.environ.get("EVENT_WINDOW_DAYS", "7"))
     if days < 1:
         days = 7
-    # Default: only keep events with a resolvable date (start_at or raw_date_text).
-    # Set EVENT_WINDOW_INCLUDE_UNDATED=1 to also pass sources with no parseable date.
-    include_undated = os.environ.get("EVENT_WINDOW_INCLUDE_UNDATED", "0").strip().lower() in (
+    # Default 1: many Phase-1 parsers do not emit dates yet; set EVENT_WINDOW_INCLUDE_UNDATED=0 for strict mode.
+    include_undated = os.environ.get("EVENT_WINDOW_INCLUDE_UNDATED", "1").strip().lower() in (
         "1",
         "true",
         "yes",

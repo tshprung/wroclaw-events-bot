@@ -87,6 +87,24 @@ def _short(s: str, n: int = 140) -> str:
     return s if len(s) <= n else s[: n - 1] + "…"
 
 
+def _wroclaw_go_page_url(base: str, page: int) -> str:
+    if page <= 1:
+        return base
+    joiner = "&" if "?" in base else "?"
+    return f"{base}{joiner}strona={page}"
+
+
+def _dedupe_events_by_url(events: list[Event]) -> list[Event]:
+    seen: set[str] = set()
+    out: list[Event] = []
+    for e in events:
+        if e.url in seen:
+            continue
+        seen.add(e.url)
+        out.append(e)
+    return out
+
+
 def main() -> int:
     logging.basicConfig(
         level=os.environ.get("LOG_LEVEL", "INFO").upper(),
@@ -138,24 +156,65 @@ def main() -> int:
     try:
         for src in sources:
             try:
-                res = fetch_url(session, src.url, verify=src.verify_ssl)
-
-                if res.status_code >= 400:
-                    upsert_source_health(
-                        conn,
-                        src.id,
-                        src.url,
-                        ok=False,
-                        http_status=res.status_code,
-                        error_kind="http_error",
-                        error_detail=f"HTTP {res.status_code}",
-                    )
-                    total_fail += 1
-                    log.warning("[%s] HTTP %s", src.id, res.status_code)
-                    continue
-
                 parser = parser_for_kind(src.kind)
-                events_raw = parser(src, res.text)
+                events_raw: list[Event] = []
+                http_for_health: int = 200
+
+                if src.kind == "wroclaw_go":
+                    max_pages = max(1, min(30, int(os.environ.get("WROCLAW_GO_MAX_PAGES", "12"))))
+                    failed_first = False
+                    for page in range(1, max_pages + 1):
+                        page_url = _wroclaw_go_page_url(src.url, page)
+                        try:
+                            res = fetch_url(session, page_url, verify=src.verify_ssl)
+                        except requests.exceptions.RequestException:
+                            if page == 1:
+                                raise
+                            log.info("[%s] stopped pages at %d (request error after first page)", src.id, page)
+                            break
+                        http_for_health = res.status_code
+                        if res.status_code >= 400:
+                            if page == 1:
+                                upsert_source_health(
+                                    conn,
+                                    src.id,
+                                    src.url,
+                                    ok=False,
+                                    http_status=res.status_code,
+                                    error_kind="http_error",
+                                    error_detail=f"HTTP {res.status_code}",
+                                )
+                                total_fail += 1
+                                conn.commit()
+                                log.warning("[%s] HTTP %s", src.id, res.status_code)
+                                failed_first = True
+                            break
+                        batch = parser(src, res.text)
+                        if not batch:
+                            break
+                        events_raw.extend(batch)
+                    if failed_first:
+                        continue
+                    events_raw = _dedupe_events_by_url(events_raw)
+                else:
+                    res = fetch_url(session, src.url, verify=src.verify_ssl)
+                    http_for_health = res.status_code
+                    if res.status_code >= 400:
+                        upsert_source_health(
+                            conn,
+                            src.id,
+                            src.url,
+                            ok=False,
+                            http_status=res.status_code,
+                            error_kind="http_error",
+                            error_detail=f"HTTP {res.status_code}",
+                        )
+                        total_fail += 1
+                        conn.commit()
+                        log.warning("[%s] HTTP %s", src.id, res.status_code)
+                        continue
+                    events_raw = parser(src, res.text)
+
                 events = filter_events_in_window(events_raw, now_local)
                 if len(events) < len(events_raw):
                     log.info(
@@ -185,7 +244,7 @@ def main() -> int:
                     src.id,
                     src.url,
                     ok=True,
-                    http_status=res.status_code,
+                    http_status=http_for_health,
                     sample_count=len(events),
                 )
                 total_ok += 1
