@@ -37,6 +37,7 @@ _JUNK_TITLE_EQ = frozenset(
         "grotowski.net",
         "jerzy grotowski",
         "e-mail: impart@impart.pl",
+        "in your pocket",
     }
 )
 
@@ -51,6 +52,54 @@ _NAV_ONLY_PATH_RE = re.compile(
     r"warsztaty|deklaracja|o-firmie|strona-glowna|wydarzenia)\s*/?\s*$",
     re.I,
 )
+
+# Stock / wallpaper marketplaces often pass the loose “long path” generic heuristic.
+_STOCK_OR_MEDIA_MARKETPLACE = re.compile(
+    r"(picfair\.com|shutterstock|alamy\.com|dreamstime\.|depositphotos|"
+    r"istockphoto|gettyimages|123rf\.|bigstockphoto|pexels\.com|unsplash\.com)",
+    re.I,
+)
+
+# Off-site links allowed for generic scrapers when they look like tickets/events (not stock photos).
+_TICKET_OR_EVENT_NETLOCS = (
+    "meetup.com",
+    "eventbrite.",
+    "facebook.com",
+    "fb.com",
+    "ebilet.pl",
+    "bilety24.pl",
+    "going.pl",
+    "kupbilet.",
+    "sklep.polsat",
+    "ticketmaster",
+    "eventim",
+    "biletomat",
+)
+
+
+def _netloc_key(url: str) -> str:
+    h = (urlparse(url).netloc or "").lower().split("@")[-1].split(":")[0]
+    if h.startswith("www."):
+        h = h[4:]
+    return h
+
+
+def _generic_external_allowed(url: str) -> bool:
+    p = urlparse(url)
+    blob = f"{p.path or ''}?{p.query or ''}".lower()
+    if _EVENT_PATH_HINTS.search(blob):
+        return True
+    netloc = (p.netloc or "").lower()
+    return any(x in netloc for x in _TICKET_OR_EVENT_NETLOCS)
+
+
+def _generic_link_respects_source_scope(source_page_url: str, link_url: str) -> bool:
+    """Keep same-site links or plausible ticket/event deep links; drop random external SEO/shops."""
+    if _STOCK_OR_MEDIA_MARKETPLACE.search(urlparse(link_url).netloc or ""):
+        return False
+    if _netloc_key(source_page_url) == _netloc_key(link_url):
+        return True
+    return _generic_external_allowed(link_url)
 
 
 def _clean(s: str) -> str:
@@ -222,6 +271,8 @@ def parse_generic_links(source: Source, html: str) -> list[Event]:
     seen = set()
     for text, url in links:
         if not _generic_link_keeps(text, url):
+            continue
+        if not _generic_link_respects_source_scope(source.url, url):
             continue
         key = (text, url)
         if key in seen:
