@@ -9,13 +9,11 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     env:
-      # Opt into Node.js 24 for JavaScript-based actions (ahead of the 2026 runner default).
-      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
       VM_PORT: ${{ secrets.VM_SSH_PORT }}
       VM_APP_DIR: ${{ secrets.VM_APP_DIR }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup SSH key
         run: |
@@ -28,25 +26,25 @@ jobs:
       - name: Ensure deploy dir exists on VM
         run: |
           PORT="${VM_PORT:-22}"
-          APP_DIR="${VM_APP_DIR:-/opt/wroclaw-events-bot}"
+          APP_DIR="${VM_APP_DIR:-$HOME/wroclaw-events-bot}"
           ssh -p "$PORT" "${{ secrets.VM_USER }}@${{ secrets.VM_HOST }}" "bash -lc 'mkdir -p \"$APP_DIR\"'"
 
-      - name: Copy repo to VM
+      - name: Upload tarball to VM
         run: |
           PORT="${VM_PORT:-22}"
-          APP_DIR="${VM_APP_DIR:-/opt/wroclaw-events-bot}"
-          rsync -az --delete \
-            -e "ssh -p $PORT" \
-            ./ \
-            "${{ secrets.VM_USER }}@${{ secrets.VM_HOST }}:$APP_DIR/"
+          APP_DIR="${VM_APP_DIR:-$HOME/wroclaw-events-bot}"
+          tar --exclude=".git" --exclude=".venv" --exclude="data" -czf app.tgz .
+          scp -P "$PORT" app.tgz "${{ secrets.VM_USER }}@${{ secrets.VM_HOST }}:$APP_DIR/app.tgz"
 
-      - name: Install venv + deps on VM
+      - name: Extract + install deps on VM
         run: |
           PORT="${VM_PORT:-22}"
-          APP_DIR="${VM_APP_DIR:-/opt/wroclaw-events-bot}"
+          APP_DIR="${VM_APP_DIR:-$HOME/wroclaw-events-bot}"
           ssh -p "$PORT" "${{ secrets.VM_USER }}@${{ secrets.VM_HOST }}" 'bash -lc "
             set -euo pipefail
             cd '"$APP_DIR"'
+            tar -xzf app.tgz
+            rm -f app.tgz
             python3 -m venv .venv
             ./.venv/bin/python -m pip install --upgrade pip
             ./.venv/bin/python -m pip install -r requirements.txt
