@@ -54,6 +54,14 @@ _NAV_ONLY_PATH_RE = re.compile(
 )
 
 # Stock / wallpaper marketplaces often pass the loose “long path” generic heuristic.
+# Numeric Facebook event permalinks (www, m., locale paths).
+_FB_EVENT_PATH_ID = re.compile(r"/events/(\d{8,20})(?:/|\?|#|$)", re.I)
+_FB_EVENT_ABS_IN_HTML = re.compile(
+    r"https?://(?:www\.|m\.|[a-z]{2}(?:-[a-z]{2})?\.)?facebook\.com/events/(\d{8,20})(?:/|\?|#|\"|'|$)",
+    re.I,
+)
+
+
 _STOCK_OR_MEDIA_MARKETPLACE = re.compile(
     r"(picfair\.com|shutterstock|alamy\.com|dreamstime\.|depositphotos|"
     r"istockphoto|gettyimages|123rf\.|bigstockphoto|pexels\.com|unsplash\.com)",
@@ -411,6 +419,74 @@ def _likely_event_like_url(url: str) -> bool:
     return False
 
 
+def _canonical_facebook_event_url(url: str) -> str | None:
+    if not url or url.startswith(("javascript:", "mailto:", "tel:", "#")):
+        return None
+    u = url.strip()
+    if u.startswith("//"):
+        u = "https:" + u
+    if not u.startswith("http"):
+        return None
+    p = urlparse(u)
+    net = (p.netloc or "").lower()
+    if "facebook.com" not in net and "fb.com" not in net:
+        return None
+    path = unquote(p.path or "")
+    m = _FB_EVENT_PATH_ID.search(path)
+    if not m:
+        return None
+    return f"https://www.facebook.com/events/{m.group(1)}/"
+
+
+def parse_facebook_event_search(source: Source, html: str) -> list[Event]:
+    """Public /events/search listings: collect permalinks; dates/venues stay on Facebook."""
+    ids: set[str] = set()
+    titles: dict[str, str] = {}
+
+    def _good_anchor_title(t: str) -> bool:
+        t2 = _clean(t)
+        if not t2 or len(t2) > 200:
+            return False
+        if _JUNK_TITLE_RE.match(t2):
+            return False
+        if t2.lower() in _JUNK_TITLE_EQ:
+            return False
+        return True
+
+    def note(url: str, anchor_text: str = "") -> None:
+        can = _canonical_facebook_event_url(url)
+        if not can:
+            return
+        eid = can.rstrip("/").rsplit("/", 1)[-1]
+        if not eid.isdigit():
+            return
+        ids.add(eid)
+        if _good_anchor_title(anchor_text):
+            t2 = _clean(anchor_text)
+            prev = titles.get(eid, "")
+            if len(t2) > len(prev):
+                titles[eid] = t2
+
+    for text, url in extract_links(
+        source.url,
+        html,
+        selector='a[href*="/events/"]',
+        limit=350,
+        allow_empty_text=True,
+    ):
+        note(url, text)
+
+    for m in _FB_EVENT_ABS_IN_HTML.finditer(html):
+        ids.add(m.group(1))
+
+    out: list[Event] = []
+    for eid in sorted(ids, key=int):
+        u = f"https://www.facebook.com/events/{eid}/"
+        title = titles.get(eid) or "Wydarzenie (Facebook)"
+        out.append(Event(source_id=source.id, title=title, start_at=None, venue=None, url=u))
+    return out
+
+
 def parse_generic_links(source: Source, html: str) -> list[Event]:
     # Generic fallback: create low-fidelity “events” from prominent links.
     # This is meant as scaffolding; source-specific parsers should replace it.
@@ -660,6 +736,7 @@ def parse_kino_nh(source: Source, html: str) -> list[Event]:
 def parser_for_kind(kind: str) -> Callable[[Source, str], list[Event]]:
     return {
         "generic_links": parse_generic_links,
+        "facebook_event_search": parse_facebook_event_search,
         "wroclaw_go": parse_wroclaw_go,
         "hala_stulecia": parse_hala_stulecia,
         "tarczynski_arena": parse_tarczynski_arena,

@@ -9,6 +9,7 @@ from .models import Event
 
 
 _SPACE_RE = re.compile(r"\s+")
+_FB_EVENT_ID_IN_URL = re.compile(r"facebook\.com/events/(\d+)", re.I)
 
 
 def _norm(s: str) -> str:
@@ -18,6 +19,10 @@ def _norm(s: str) -> str:
 
 
 def fingerprint(ev: Event) -> str:
+    # One row per Facebook event permalink; anchor text on search pages is unstable.
+    mfb = _FB_EVENT_ID_IN_URL.search(ev.url or "")
+    if mfb:
+        return f"fb:{mfb.group(1)}"
     title = _norm(ev.title)
     venue = _norm(ev.venue or "")
     start = ev.start_at.isoformat() if ev.start_at else ""

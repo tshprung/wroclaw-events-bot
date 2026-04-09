@@ -48,6 +48,12 @@ sources:
     kind: meetup_find
     enabled: true
 
+  - id: facebook_events_search_wroclaw
+    name: Facebook — wyszukiwanie wydarzeń (Wrocław)
+    url: https://www.facebook.com/events/search?q=Wroc%C5%82aw
+    kind: facebook_event_search
+    enabled: true
+
   - id: crossweb_wroclaw
     name: Crossweb Wrocław
     url: https://crossweb.pl/wydarzenia/wroclaw/
@@ -163,12 +169,6 @@ sources:
     kind: generic_links
     enabled: true
 
-  - id: stary_klasztor
-    name: Klub muzyczny Stary Klasztor
-    url: https://www.staryklasztor.pl/
-    kind: generic_links
-    enabled: true
-
   - id: teatr_lalek_wroclaw
     name: Wrocławski Teatr Lalek
     url: https://www.teatrlalek.wroclaw.pl/pl/repertuar-wtl
@@ -184,11 +184,5 @@ sources:
   - id: zamek_wydarzenia
     name: Centrum Kultury Zamek — wydarzenia
     url: https://zamek.com.pl/wydarzenia
-    kind: generic_links
-    enabled: true
-
-  - id: goout_wroclaw
-    name: GoOut — Wrocław
-    url: https://goout.net/pl/wroclaw/events/
     kind: generic_links
     enabled: true

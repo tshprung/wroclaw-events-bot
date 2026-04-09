@@ -27,6 +27,12 @@ _DEFAULT_URL_PARTS: frozenset[str] = frozenset(
         "muzeumarchitektury.pl",
         "muzeum.miejskie.wroclaw",
         "bwa.wroc.pl",
+        # Senior-care site at staryklasztor.pl (not Wrocław club); drop if linked elsewhere.
+        "staryklasztor.pl",
+        # WTeatrW CMS: /Repertuar,N is the repertoire index, not a single show.
+        "wteatrw.pl/repertuar,",
+        # GoOut marketing / shop list, not events (other pages may still link here).
+        "goout.net/pl/ticket-shops",
     }
 )
 
