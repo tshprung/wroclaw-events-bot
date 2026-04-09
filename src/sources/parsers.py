@@ -5,7 +5,7 @@ import re
 import unicodedata
 from datetime import datetime
 from typing import Callable
-from urllib.parse import quote, unquote, urlparse
+from urllib.parse import quote, unquote, urljoin, urlparse
 
 from dateutil import parser as dtparser
 from dateutil import tz as dttz
@@ -111,10 +111,100 @@ def _fold_match(s: str) -> str:
     return "".join(c for c in s if not unicodedata.combining(c))
 
 
-def _wroclaw_go_ld_rows(html: str) -> list[tuple[str, datetime, str | None]]:
+# Detail URLs: /go/wydarzenia/<kategoria>/<id>-<slug> (numeric id).
+_GO_EVENT_PATH = re.compile(r"/go/wydarzenia/[^/]+/\d+[-a-z0-9]", re.IGNORECASE)
+_GO_URL_SLUG = re.compile(r"/go/wydarzenia/[^/]+/\d+-(.+)$", re.IGNORECASE)
+
+
+def _slug_title_from_go_url(url: str) -> str:
+    path = unquote(urlparse(url).path or "")
+    m = _GO_URL_SLUG.search(path)
+    if not m:
+        return ""
+    return _clean(m.group(1).replace("-", " "))
+
+
+def _abs_http_url(u: str | None, base_page: str) -> str | None:
+    if not u or not isinstance(u, str):
+        return None
+    u = u.strip()
+    if not u or u.startswith(("javascript:", "mailto:", "tel:", "#")):
+        return None
+    if u.startswith("//"):
+        u = "https:" + u
+    if not u.startswith(("http://", "https://")):
+        u = urljoin(base_page, u)
+    if not u.startswith(("http://", "https://")):
+        return None
+    return u
+
+
+def _path_looks_like_event_detail_url(url: str) -> bool:
+    """True for /wydarzenia/concrete-slug etc., not bare org homepages or listing roots."""
+    raw = (urlparse(url).path or "").strip("/")
+    if not raw:
+        return False
+    parts = [x for x in raw.split("/") if x]
+    pl = "/" + "/".join(parts).lower() + "/"
+    if "wydarzen" in pl and len(parts) >= 2:
+        return True
+    if _EVENT_PATH_HINTS.search(pl):
+        return True
+    netloc = (urlparse(url).netloc or "").lower()
+    if "meetup." in netloc and "/events/" in pl:
+        return True
+    return False
+
+
+def _ld_json_event_fallback_url(item: dict, listing_url: str) -> str | None:
+    """Use schema.org url / offers / sameAs / organizer when wroclaw.pl omits <a> permalinks."""
+
+    def take(candidate: str | None, *, strict_organizer: bool = False) -> str | None:
+        u = _abs_http_url(candidate, listing_url)
+        if not u:
+            return None
+        path = urlparse(u).path or ""
+        if _GO_EVENT_PATH.search(path):
+            return u
+        if strict_organizer:
+            return u if _path_looks_like_event_detail_url(u) else None
+        if _path_looks_like_event_detail_url(u):
+            return u
+        if _generic_external_allowed(u):
+            return u
+        return None
+
+    u = take(item.get("url"))
+    if u:
+        return u
+    sa = item.get("sameAs")
+    if isinstance(sa, str):
+        u = take(sa)
+        if u:
+            return u
+    elif isinstance(sa, list):
+        for x in sa:
+            if isinstance(x, str):
+                u = take(x)
+                if u:
+                    return u
+    off = item.get("offers")
+    if isinstance(off, dict):
+        u = take(off.get("url"))
+        if u:
+            return u
+    org = item.get("organizer")
+    if isinstance(org, dict):
+        u = take(org.get("url"), strict_organizer=True)
+        if u:
+            return u
+    return None
+
+
+def _wroclaw_go_ld_rows(html: str, listing_url: str) -> list[tuple[str, datetime, str | None, str | None]]:
     """schema.org Event rows from application/ld+json (gives real startDate)."""
     tzinfo = dttz.gettz("Europe/Warsaw") or dttz.tzlocal()
-    rows: list[tuple[str, datetime, str | None]] = []
+    rows: list[tuple[str, datetime, str | None, str | None]] = []
     for script in soup(html).select('script[type="application/ld+json"]'):
         raw = (script.string or "").strip()
         if not raw:
@@ -147,7 +237,8 @@ def _wroclaw_go_ld_rows(html: str) -> list[tuple[str, datetime, str | None]]:
             venue = None
             if isinstance(loc, dict):
                 venue = _clean(loc.get("name") or "") or None
-            rows.append((name, st, venue))
+            fb = _ld_json_event_fallback_url(item, listing_url)
+            rows.append((name, st, venue, fb))
     return rows
 
 
@@ -160,24 +251,6 @@ def _anchor_card_title(anchor_text: str) -> str:
     if wm:
         return _clean(t[: wm.start()].strip())
     return t
-
-
-def _dedupe_prefer_real_go_url(events: list[Event]) -> list[Event]:
-    """Prefer real /go/.../id slug URLs over synthetic listing#evt fragment keys."""
-    best: dict[tuple[str, str], Event] = {}
-    for e in events:
-        sk = e.start_at.isoformat() if e.start_at else ""
-        key = (_fold_match(e.title), sk)
-        cur = best.get(key)
-        if cur is None:
-            best[key] = e
-        elif "#evt-" in cur.url and "#evt-" not in e.url:
-            best[key] = e
-        elif "#evt-" not in cur.url:
-            best[key] = cur
-        else:
-            best[key] = e
-    return list(best.values())
 
 
 def _go_synthetic_detail_url(listing_base: str, name: str, st: datetime) -> str:
@@ -208,6 +281,38 @@ def _best_url_for_ld_name(ld_name: str, cand: list[tuple[str, str]], used_urls: 
             best_sc = sc
             best_u = url
     return best_u if best_sc >= 74 else None
+
+
+def _wroclaw_go_url_rank(url: str) -> int:
+    if "#evt-" in url:
+        return 0
+    path = urlparse(url).path or ""
+    if _GO_EVENT_PATH.search(path):
+        return 4
+    p = urlparse(url)
+    if p.scheme not in ("http", "https") or not p.netloc:
+        return 0
+    if _path_looks_like_event_detail_url(url):
+        return 3
+    if _generic_external_allowed(url):
+        return 2
+    return 0
+
+
+def _dedupe_prefer_real_go_url(events: list[Event]) -> list[Event]:
+    """Prefer wroclaw.pl /go/.../id slugs, then concrete external pages, over #evt fragments."""
+    best: dict[tuple[str, str], Event] = {}
+    for e in events:
+        sk = e.start_at.isoformat() if e.start_at else ""
+        key = (_fold_match(e.title), sk)
+        cur = best.get(key)
+        if cur is None:
+            best[key] = e
+        elif _wroclaw_go_url_rank(e.url) > _wroclaw_go_url_rank(cur.url):
+            best[key] = e
+        else:
+            best[key] = cur
+    return list(best.values())
 
 
 def _generic_link_keeps(text: str, url: str) -> bool:
@@ -282,20 +387,6 @@ def parse_generic_links(source: Source, html: str) -> list[Event]:
     return out
 
 
-# Detail URLs: /go/wydarzenia/<kategoria>/<id>-<slug> (numeric id). Category-only paths
-# are /go/wydarzenia/kino etc. with no id segment.
-_GO_EVENT_PATH = re.compile(r"/go/wydarzenia/[^/]+/\d+[-a-z0-9]", re.IGNORECASE)
-_GO_URL_SLUG = re.compile(r"/go/wydarzenia/[^/]+/\d+-(.+)$", re.IGNORECASE)
-
-
-def _slug_title_from_go_url(url: str) -> str:
-    path = unquote(urlparse(url).path or "")
-    m = _GO_URL_SLUG.search(path)
-    if not m:
-        return ""
-    return _clean(m.group(1).replace("-", " "))
-
-
 def parse_wroclaw_go(source: Source, html: str) -> list[Event]:
     # Cards are hydrated in JSON-LD (startDate); visible HTML often has only a few <a> rows.
     links = extract_links(
@@ -306,14 +397,16 @@ def parse_wroclaw_go(source: Source, html: str) -> list[Event]:
         allow_empty_text=True,
     )
     cand = [(t, u) for t, u in links if _GO_EVENT_PATH.search(u) and (t or _slug_title_from_go_url(u))]
-    rows = _wroclaw_go_ld_rows(html)
+    rows = _wroclaw_go_ld_rows(html, source.url)
     used_urls: set[str] = set()
     out: list[Event] = []
-    for name, st, ven in rows:
+    for name, st, ven, ld_fb in rows:
         hit = _best_url_for_ld_name(name, cand, used_urls)
         if hit:
             used_urls.add(hit)
             url = hit
+        elif ld_fb:
+            url = ld_fb
         else:
             url = _go_synthetic_detail_url(source.url, name, st)
         out.append(
