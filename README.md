@@ -84,6 +84,7 @@ Add these secrets in your GitHub repo settings:
 - `VM_USER` (e.g. `tal`)
 - `VM_SSH_KEY` (private key for SSH deploy)
 - Optional: `VM_SSH_PORT` (default 22)
+- Optional: `VM_APP_DIR` (default `/opt/wroclaw-events-bot`; set this if your SSH user cannot write to `/opt`)
 
 ## Source health
 
