@@ -72,12 +72,6 @@ sources:
     kind: wroclaw_travel_calendar
     enabled: true
 
-  - id: partynice
-    name: Tor Wyścigów Konnych Partynice
-    url: https://partynice.pl/
-    kind: generic_links
-    enabled: true
-
   - id: opera_wroclawska
     name: Opera Wrocławska
     url: https://www.opera.wroclaw.pl/
@@ -166,5 +160,35 @@ sources:
   - id: biblioteka_wroclaw
     name: Biblioteka Miejska (wydarzenia)
     url: https://biblioteka.wroc.pl/wydarzenia/
+    kind: generic_links
+    enabled: true
+
+  - id: stary_klasztor
+    name: Klub muzyczny Stary Klasztor
+    url: https://www.staryklasztor.pl/
+    kind: generic_links
+    enabled: true
+
+  - id: teatr_lalek_wroclaw
+    name: Wrocławski Teatr Lalek
+    url: https://lalek.wroclaw.pl/
+    kind: generic_links
+    enabled: true
+
+  - id: teatr_wspolczesny_wroclaw
+    name: Wrocławski Teatr Współczesny
+    url: https://wteatrw.pl/
+    kind: generic_links
+    enabled: true
+
+  - id: zamek_wydarzenia
+    name: Centrum Kultury Zamek — wydarzenia
+    url: https://zamek.com.pl/wydarzenia
+    kind: generic_links
+    enabled: true
+
+  - id: goout_wroclaw
+    name: GoOut — Wrocław
+    url: https://goout.net/pl/wroclaw/events/
     kind: generic_links
     enabled: true

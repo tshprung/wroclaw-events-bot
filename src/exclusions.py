@@ -57,7 +57,10 @@ def _all_venue_parts() -> frozenset[str]:
 
 
 def event_is_excluded(ev: Event) -> bool:
-    u = (ev.url or "").lower()
+    u_raw = (ev.url or "").strip()
+    if not u_raw.lower().startswith("https://"):
+        return True
+    u = u_raw.lower()
     for frag in _all_url_parts():
         if frag in u:
             return True
