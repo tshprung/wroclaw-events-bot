@@ -33,6 +33,8 @@ _DEFAULT_URL_PARTS: frozenset[str] = frozenset(
         "wteatrw.pl/repertuar,",
         # GoOut marketing / shop list, not events (other pages may still link here).
         "goout.net/pl/ticket-shops",
+        # WTL: permanent show pages under /pl/spektakle/…, not dated performances.
+        "teatrlalek.wroclaw.pl/pl/spektakle/",
     }
 )
 

@@ -4,7 +4,7 @@ import logging
 import os
 from dataclasses import dataclass
 import time
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse, urlunparse
 
 import requests
 import urllib3
@@ -36,6 +36,86 @@ class FetchResult:
     final_url: str
 
 
+def _browser_ua() -> str:
+    return (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/131.0.0.0 Safari/537.36"
+    )
+
+
+def _facebook_search_headers(*, referer: str) -> dict[str, str]:
+    return {
+        "User-Agent": _browser_ua(),
+        "Accept": (
+            "text/html,application/xhtml+xml,application/xml;q=0.9,"
+            "image/avif,image/webp,image/apng,*/*;q=0.8"
+        ),
+        "Accept-Language": "pl-PL,pl;q=0.9,en-US;q=0.8,en;q=0.7",
+        "Cache-Control": "max-age=0",
+        "Referer": referer,
+        "Sec-Fetch-Dest": "document",
+        "Sec-Fetch-Mode": "navigate",
+        "Sec-Fetch-Site": "same-origin" if "facebook.com" in referer else "none",
+        "Sec-Fetch-User": "?1",
+        "Upgrade-Insecure-Requests": "1",
+    }
+
+
+def _m_facebook_equivalent(url: str) -> str:
+    p = urlparse(url)
+    host = (p.netloc or "").lower()
+    if not host.endswith("facebook.com"):
+        return url
+    if host == "m.facebook.com":
+        return url
+    return urlunparse(p._replace(netloc="m.facebook.com"))
+
+
+def fetch_facebook_event_search(
+    session: requests.Session,
+    url: str,
+    *,
+    timeout: tuple[float, float] | None = None,
+    verify: bool | str = True,
+) -> FetchResult:
+    """Facebook often returns 400 to bare clients; try desktop- and mobile-style requests."""
+    if verify is False:
+        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+    if timeout is None:
+        timeout = _http_timeout()
+
+    attempts: list[tuple[str, dict[str, str]]] = [
+        (url, _facebook_search_headers(referer="https://www.facebook.com/")),
+        (_m_facebook_equivalent(url), _facebook_search_headers(referer="https://m.facebook.com/")),
+    ]
+
+    last_exc: Exception | None = None
+    last_result: FetchResult | None = None
+    for req_url, headers in attempts:
+        for attempt in range(3):
+            try:
+                r = session.get(
+                    req_url,
+                    timeout=timeout,
+                    headers=headers,
+                    allow_redirects=True,
+                    verify=verify,
+                )
+                last_result = FetchResult(status_code=r.status_code, text=r.text, final_url=str(r.url))
+                if r.status_code < 400:
+                    return last_result
+                break
+            except requests.exceptions.RequestException as e:
+                last_exc = e
+                time.sleep(0.6 * (2**attempt))
+    if last_result is not None:
+        return last_result
+    if last_exc is not None:
+        raise last_exc
+    raise RuntimeError("fetch_facebook_event_search: empty attempts")
+
+
 def fetch_url(
     session: requests.Session,
     url: str,
@@ -45,11 +125,7 @@ def fetch_url(
 ) -> FetchResult:
 
     headers = {
-        "User-Agent": (
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-            "AppleWebKit/537.36 (KHTML, like Gecko) "
-            "Chrome/124.0.0.0 Safari/537.36"
-        ),
+        "User-Agent": _browser_ua(),
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
         "Accept-Language": "pl-PL,pl;q=0.9,en;q=0.8",
     }

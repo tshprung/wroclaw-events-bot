@@ -20,7 +20,7 @@ from .models import Event, Source
 from .storage import connect, insert_event_if_new, upsert_source_health
 from .storage import list_source_health_alerts
 from .telegram import TelegramClient, format_event_message
-from .sources.common import fetch_url
+from .sources.common import fetch_facebook_event_search, fetch_url
 from .sources.parsers import parser_for_kind
 
 
@@ -207,7 +207,10 @@ def main() -> int:
                         continue
                     events_raw = _dedupe_events_by_url(events_raw)
                 else:
-                    res = fetch_url(session, src.url, verify=src.verify_ssl)
+                    if src.kind == "facebook_event_search":
+                        res = fetch_facebook_event_search(session, src.url, verify=src.verify_ssl)
+                    else:
+                        res = fetch_url(session, src.url, verify=src.verify_ssl)
                     http_for_health = res.status_code
                     if res.status_code >= 400:
                         upsert_source_health(
