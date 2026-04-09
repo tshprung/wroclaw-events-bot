@@ -8,7 +8,7 @@ from datetime import datetime
 
 import requests
 import yaml
-from dotenv import load_dotenv
+from dotenv import dotenv_values, load_dotenv
 from dateutil import tz
 
 from .config import load_settings
@@ -111,7 +111,16 @@ def main() -> int:
         format="%(asctime)s %(levelname)s %(message)s",
     )
     load_dotenv()
+    # `load_dotenv()` does not override an already-set `DRY_RUN` (e.g. from shell).
+    # If the file defines DRY_RUN, treat that as authoritative for posting behavior.
+    env_file = pathlib.Path(".env")
+    if env_file.is_file():
+        file_vals = dotenv_values(env_file) or {}
+        if "DRY_RUN" in file_vals and file_vals["DRY_RUN"] is not None:
+            os.environ["DRY_RUN"] = str(file_vals["DRY_RUN"]).strip()
+
     settings = load_settings()
+    log.info("DRY_RUN effective=%r dry_run=%s", os.environ.get("DRY_RUN"), settings.dry_run)
 
     tzinfo = tz.gettz(settings.timezone) or tz.tzlocal()
     now_local = datetime.now(tzinfo)
@@ -271,7 +280,7 @@ def main() -> int:
                         else:
                             assert telegram is not None
                             telegram.send_message(settings.telegram_channel_id, msg)
-                        posts_sent += 1
+                            posts_sent += 1
 
                 conn.commit()
             except requests.exceptions.RequestException as e:
