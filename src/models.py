@@ -11,6 +11,9 @@ class Source:
     url: str
     kind: str
     enabled: bool = True
+    # Some sites have broken chains; set false in sources YAML only when needed.
+    verify_ssl: bool = True
+
 
 
 @dataclass(frozen=True)

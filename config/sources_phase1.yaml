@@ -99,7 +99,7 @@ sources:
   - id: instytut_grotowskiego
     name: Instytut Grotowskiego (wydarzenia)
     url: https://grotowski-institute.pl/wydarzenia/
-    kind: generic_links
+    kind: grotowski_wydarzenia
     enabled: true
 
   - id: impart
@@ -111,7 +111,7 @@ sources:
   - id: kino_nh
     name: Kino Nowe Horyzonty
     url: https://www.kinonh.pl/
-    kind: generic_links
+    kind: kino_nh
     enabled: true
 
   - id: muzeum_narodowe
@@ -148,6 +148,7 @@ sources:
     name: Centrum Historii Zajezdnia (wydarzenia)
     url: https://www.zajezdnia.org/wydarzenia/
     kind: generic_links
+    verify_ssl: false
     enabled: true
 
   - id: hydropolis
@@ -193,8 +194,8 @@ sources:
     enabled: true
 
   - id: biblioteka_wroclaw
-    name: Biblioteka (wroclaw.pl)
-    url: https://www.wroclaw.pl/biblioteka
+    name: Biblioteka Miejska (wydarzenia)
+    url: https://biblioteka.wroc.pl/wydarzenia/
     kind: generic_links
     enabled: true
 

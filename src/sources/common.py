@@ -18,7 +18,14 @@ class FetchResult:
     final_url: str
 
 
-def fetch_url(session: requests.Session, url: str, *, timeout: tuple = (5, 20)) -> FetchResult:
+def fetch_url(
+    session: requests.Session,
+    url: str,
+    *,
+    timeout: tuple = (5, 20),
+    verify: bool | str = True,
+) -> FetchResult:
+
     headers = {
         "User-Agent": (
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -31,7 +38,14 @@ def fetch_url(session: requests.Session, url: str, *, timeout: tuple = (5, 20)) 
     last_exc: Exception | None = None
     for attempt in range(3):
         try:
-            r = session.get(url, timeout=timeout, headers=headers, allow_redirects=True)
+            r = session.get(
+                url,
+                timeout=timeout,
+                headers=headers,
+                allow_redirects=True,
+                verify=verify,
+            )
+
             return FetchResult(status_code=r.status_code, text=r.text, final_url=str(r.url))
         except requests.exceptions.RequestException as e:
             last_exc = e

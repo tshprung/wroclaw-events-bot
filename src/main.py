@@ -12,6 +12,7 @@ from dotenv import load_dotenv
 from dateutil import tz
 
 from .config import load_settings
+from .event_window import filter_events_in_window, load_window_options
 from .dedupe import fingerprint
 from .health import should_admin_alert
 from .models import Event, Source
@@ -75,6 +76,7 @@ def _load_sources(path: str) -> list[Source]:
                 url=str(s["url"]),
                 kind=str(s.get("kind") or "generic_links"),
                 enabled=bool(s.get("enabled", True)),
+                verify_ssl=bool(s.get("verify_ssl", True)),
             )
         )
     return sources
@@ -125,11 +127,13 @@ def main() -> int:
     posts_sent = 0
     post_mode = os.environ.get("POST_MODE", "immediate").strip().lower()  # immediate|digest
     digest_lines: list[str] = []
+    window_days, _window_undated = load_window_options()
 
     try:
         for src in sources:
             try:
-                res = fetch_url(session, src.url)
+                res = fetch_url(session, src.url, verify=src.verify_ssl)
+
                 if res.status_code >= 400:
                     upsert_source_health(
                         conn,
@@ -145,7 +149,16 @@ def main() -> int:
                     continue
 
                 parser = parser_for_kind(src.kind)
-                events = parser(src, res.text)
+                events_raw = parser(src, res.text)
+                events = filter_events_in_window(events_raw, now_local)
+                if len(events) < len(events_raw):
+                    log.info(
+                        "[%s] time window: kept %d/%d (now .. +%dd)",
+                        src.id,
+                        len(events),
+                        len(events_raw),
+                        window_days,
+                    )
 
                 upsert_source_health(
                     conn,
