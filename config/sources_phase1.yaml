@@ -114,12 +114,6 @@ sources:
     kind: kino_nh
     enabled: true
 
-  - id: muzeum_narodowe
-    name: Muzeum Narodowe we Wrocławiu
-    url: https://mnwr.pl/wydarzenia/
-    kind: generic_links
-    enabled: true
-
   - id: panorama_raclawicka
     name: Panorama Racławicka
     url: https://panoramaraclawicka.pl/
