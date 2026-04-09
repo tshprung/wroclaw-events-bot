@@ -114,43 +114,6 @@ sources:
     kind: kino_nh
     enabled: true
 
-  - id: panorama_raclawicka
-    name: Panorama Racławicka
-    url: https://panoramaraclawicka.pl/
-    kind: generic_links
-    enabled: true
-
-  - id: muzeum_miejskie
-    name: Muzeum Miejskie Wrocławia
-    url: https://muzeum.miejskie.wroclaw.pl/
-    kind: generic_links
-    enabled: true
-
-  - id: muzeum_architektury
-    name: Muzeum Architektury (wydarzenia)
-    url: https://muzeumarchitektury.pl/wydarzenia/
-    kind: generic_links
-    enabled: true
-
-  - id: bwa_wroclaw
-    name: BWA Wrocław
-    url: https://bwa.wroc.pl/
-    kind: generic_links
-    enabled: true
-
-  - id: zajezdnia
-    name: Centrum Historii Zajezdnia (wydarzenia)
-    url: https://www.zajezdnia.org/wydarzenia/
-    kind: generic_links
-    verify_ssl: false
-    enabled: true
-
-  - id: hydropolis
-    name: Hydropolis aktualności
-    url: https://hydropolis.pl/blog/aktualnosci/
-    kind: generic_links
-    enabled: true
-
   - id: zoo_wroclaw
     name: ZOO Wrocław aktualności
     url: https://zoo.wroclaw.pl/aktualnosci/
@@ -167,12 +130,6 @@ sources:
     name: In Your Pocket Wrocław events
     url: https://www.inyourpocket.com/wroclaw/events
     kind: generic_links
-    enabled: true
-
-  - id: hydropolis_go_wroclaw
-    name: wroclaw.pl/go (Hydropolis place filter)
-    url: https://www.wroclaw.pl/go/wydarzenia?miejsce=14281-hydropolis
-    kind: wroclaw_go
     enabled: true
 
   - id: hala_stulecia_go_wroclaw
@@ -192,11 +149,3 @@ sources:
     url: https://biblioteka.wroc.pl/wydarzenia/
     kind: generic_links
     enabled: true
-
-  - id: asp_wroclaw
-    name: ASP Wrocław
-    url: https://www.asp.wroc.pl/
-    kind: generic_links
-    verify_ssl: false
-    enabled: true
-
