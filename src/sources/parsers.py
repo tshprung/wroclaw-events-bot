@@ -5,7 +5,7 @@ import re
 import unicodedata
 from datetime import datetime
 from typing import Callable
-from urllib.parse import quote, urlparse
+from urllib.parse import quote, unquote, urlparse
 
 from dateutil import parser as dtparser
 from dateutil import tz as dttz
@@ -144,7 +144,17 @@ def _best_url_for_ld_name(ld_name: str, cand: list[tuple[str, str]], used_urls: 
     for text, url in cand:
         if url in used_urls:
             continue
-        sc = token_sort_ratio(fn, _fold_match(_anchor_card_title(text)))
+        scores: list[int] = []
+        if text:
+            at = _anchor_card_title(text)
+            if at:
+                scores.append(token_sort_ratio(fn, _fold_match(at)))
+        slug_t = _slug_title_from_go_url(url)
+        if slug_t:
+            scores.append(token_sort_ratio(fn, _fold_match(slug_t)))
+        if not scores:
+            continue
+        sc = max(scores)
         if sc > best_sc:
             best_sc = sc
             best_u = url
@@ -224,6 +234,15 @@ def parse_generic_links(source: Source, html: str) -> list[Event]:
 # Detail URLs: /go/wydarzenia/<kategoria>/<id>-<slug> (numeric id). Category-only paths
 # are /go/wydarzenia/kino etc. with no id segment.
 _GO_EVENT_PATH = re.compile(r"/go/wydarzenia/[^/]+/\d+[-a-z0-9]", re.IGNORECASE)
+_GO_URL_SLUG = re.compile(r"/go/wydarzenia/[^/]+/\d+-(.+)$", re.IGNORECASE)
+
+
+def _slug_title_from_go_url(url: str) -> str:
+    path = unquote(urlparse(url).path or "")
+    m = _GO_URL_SLUG.search(path)
+    if not m:
+        return ""
+    return _clean(m.group(1).replace("-", " "))
 
 
 def parse_wroclaw_go(source: Source, html: str) -> list[Event]:
@@ -233,8 +252,9 @@ def parse_wroclaw_go(source: Source, html: str) -> list[Event]:
         html,
         selector="a[href*='/go/wydarzenia/']",
         limit=400,
+        allow_empty_text=True,
     )
-    cand = [(t, u) for t, u in links if _GO_EVENT_PATH.search(u) and t]
+    cand = [(t, u) for t, u in links if _GO_EVENT_PATH.search(u) and (t or _slug_title_from_go_url(u))]
     rows = _wroclaw_go_ld_rows(html)
     used_urls: set[str] = set()
     out: list[Event] = []

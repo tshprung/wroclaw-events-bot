@@ -69,6 +69,7 @@ def extract_links(
     *,
     selector: str = "a[href]",
     limit: int = 200,
+    allow_empty_text: bool = False,
 ) -> list[tuple[str, str]]:
     s = soup(html)
     out: list[tuple[str, str]] = []
@@ -78,7 +79,7 @@ def extract_links(
             continue
         abs_url = urljoin(base_url, href)
         text = " ".join(a.get_text(" ", strip=True).split())
-        if not text:
+        if not text and not allow_empty_text:
             continue
         out.append((text, abs_url))
         if len(out) >= limit:
