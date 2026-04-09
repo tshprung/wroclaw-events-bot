@@ -1,0 +1,206 @@
+version: 1
+sources:
+  - id: wroclaw_go_all
+    name: wroclaw.pl/go all events
+    url: https://www.wroclaw.pl/go/wydarzenia/wszystkie
+    kind: wroclaw_go
+    enabled: true
+
+  - id: wroclaw_go_weekend
+    name: wroclaw.pl/go weekend summaries
+    url: https://www.wroclaw.pl/go/zestawienia
+    kind: generic_links
+    enabled: true
+
+  - id: wydarzenia_wroclaw
+    name: wydarzenia.wroclaw.pl
+    url: https://wydarzenia.wroclaw.pl/
+    kind: wydarzenia_wroclaw
+    enabled: true
+
+  - id: pik_wroclaw
+    name: PIK Wrocław
+    url: https://pik.wroclaw.pl/
+    kind: pik
+    enabled: true
+
+  - id: hala_stulecia
+    name: Hala Stulecia
+    url: https://halastulecia.pl/kalendarz-imprez/
+    kind: hala_stulecia
+    enabled: true
+
+  - id: tarczynski_arena
+    name: Tarczyński Arena Wrocław
+    url: https://tarczynskiarenawroclaw.pl/kalendarz-wydarzen/
+    kind: tarczynski_arena
+    enabled: true
+
+  - id: nfm_repertuar
+    name: NFM repertuar
+    url: https://www.nfm.wroclaw.pl/repertuar
+    kind: nfm_repertuar
+    enabled: true
+
+  - id: meetup_wroclaw_events
+    name: Meetup (events near Wrocław)
+    url: https://www.meetup.com/find/?location=pl--Wroclaw&source=EVENTS
+    kind: meetup_find
+    enabled: true
+
+  - id: crossweb_wroclaw
+    name: Crossweb Wrocław
+    url: https://crossweb.pl/wydarzenia/wroclaw/
+    kind: crossweb
+    enabled: true
+
+  - id: ebilet_wroclaw
+    name: eBilet Wrocław
+    url: https://www.ebilet.pl/miasto/wroclaw
+    kind: ebilet_city
+    enabled: true
+
+  - id: wroclawguide_calendar
+    name: WroclawGuide calendar (EN)
+    url: https://www.wroclawguide.com/en/event-calendar-wroclaw/
+    kind: wroclawguide_calendar
+    enabled: true
+
+  - id: wroclaw_travel_calendar
+    name: WROCŁAW.travel calendar (EN)
+    url: https://wroclaw.travel/en/event-calendar/
+    kind: wroclaw_travel_calendar
+    enabled: true
+
+  - id: partynice
+    name: Tor Wyścigów Konnych Partynice
+    url: https://partynice.pl/
+    kind: generic_links
+    enabled: true
+
+  - id: opera_wroclawska
+    name: Opera Wrocławska
+    url: https://www.opera.wroclaw.pl/
+    kind: generic_links
+    enabled: true
+
+  - id: teatr_capitol
+    name: Teatr Muzyczny Capitol
+    url: https://www.teatr-capitol.pl/
+    kind: generic_links
+    enabled: true
+
+  - id: teatr_polski
+    name: Teatr Polski we Wrocławiu
+    url: https://www.teatrpolski.wroc.pl/
+    kind: generic_links
+    enabled: true
+
+  - id: instytut_grotowskiego
+    name: Instytut Grotowskiego (wydarzenia)
+    url: https://grotowski-institute.pl/wydarzenia/
+    kind: generic_links
+    enabled: true
+
+  - id: impart
+    name: Impart (wydarzenia)
+    url: https://impart.pl/
+    kind: generic_links
+    enabled: true
+
+  - id: kino_nh
+    name: Kino Nowe Horyzonty
+    url: https://www.kinonh.pl/
+    kind: generic_links
+    enabled: true
+
+  - id: muzeum_narodowe
+    name: Muzeum Narodowe we Wrocławiu
+    url: https://mnwr.pl/wydarzenia/
+    kind: generic_links
+    enabled: true
+
+  - id: panorama_raclawicka
+    name: Panorama Racławicka
+    url: https://panoramaraclawicka.pl/
+    kind: generic_links
+    enabled: true
+
+  - id: muzeum_miejskie
+    name: Muzeum Miejskie Wrocławia
+    url: https://www.muzeumwroclaw.pl/
+    kind: generic_links
+    enabled: true
+
+  - id: muzeum_architektury
+    name: Muzeum Architektury (wydarzenia)
+    url: https://muzeumarchitektury.pl/wydarzenia/
+    kind: generic_links
+    enabled: true
+
+  - id: bwa_wroclaw
+    name: BWA Wrocław
+    url: https://bwa.wroc.pl/
+    kind: generic_links
+    enabled: true
+
+  - id: zajezdnia
+    name: Centrum Historii Zajezdnia (wydarzenia)
+    url: https://www.zajezdnia.org/wydarzenia/
+    kind: generic_links
+    enabled: true
+
+  - id: hydropolis
+    name: Hydropolis aktualności
+    url: https://hydropolis.pl/blog/aktualnosci/
+    kind: generic_links
+    enabled: true
+
+  - id: zoo_wroclaw
+    name: ZOO Wrocław aktualności
+    url: https://zoo.wroclaw.pl/aktualnosci/
+    kind: generic_links
+    enabled: true
+
+  - id: hard_rock_wroclaw
+    name: Hard Rock Cafe Wrocław (calendar)
+    url: https://cafe.hardrock.com/wroclaw/event-calendar.aspx
+    kind: generic_links
+    enabled: true
+
+  - id: inyourpocket_wroclaw_events
+    name: In Your Pocket Wrocław events
+    url: https://www.inyourpocket.com/wroclaw/events
+    kind: generic_links
+    enabled: true
+
+  - id: hydropolis_go_wroclaw
+    name: wroclaw.pl/go (Hydropolis place filter)
+    url: https://www.wroclaw.pl/go/wydarzenia?miejsce=14281-hydropolis
+    kind: wroclaw_go
+    enabled: true
+
+  - id: hala_stulecia_go_wroclaw
+    name: wroclaw.pl/go (Hala Stulecia place filter)
+    url: https://www.wroclaw.pl/go/wydarzenia?miejsce=151-hala-stulecia-we-wroclawiu
+    kind: wroclaw_go
+    enabled: true
+
+  - id: stadion_wroclaw_go
+    name: wroclaw.pl/go (Stadion Wrocław place filter)
+    url: https://www.wroclaw.pl/go/wydarzenia?miejsce=942-stadion-wroclaw
+    kind: wroclaw_go
+    enabled: true
+
+  - id: biblioteka_wroclaw
+    name: Biblioteka (wroclaw.pl)
+    url: https://www.wroclaw.pl/biblioteka
+    kind: generic_links
+    enabled: true
+
+  - id: asp_wroclaw
+    name: ASP Wrocław
+    url: https://www.asp.wroc.pl/
+    kind: generic_links
+    enabled: true
+

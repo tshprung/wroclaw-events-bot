@@ -1,0 +1,12 @@
+version: 1
+sources:
+  - id: facebook_events
+    reason: login/captcha/high maintenance
+  - id: instagram
+    reason: not a structured calendar; often requires auth
+  - id: eventim_wroclaw
+    url: https://www.eventim.pl/city/wroclaw-244/
+    reason: heavy/JS/timeouts; may require browser automation
+  - id: some_eventbrite_queries
+    url: https://www.eventbrite.com/d/poland--wroc%C5%82aw/events/
+    reason: needs tighter query URLs/pagination to be reliable
