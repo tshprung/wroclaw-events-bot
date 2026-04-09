@@ -6,6 +6,7 @@ import time
 from urllib.parse import urljoin
 
 import requests
+import urllib3
 from bs4 import BeautifulSoup
 
 log = logging.getLogger(__name__)
@@ -35,6 +36,9 @@ def fetch_url(
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
         "Accept-Language": "pl-PL,pl;q=0.9,en;q=0.8",
     }
+    if verify is False:
+        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
     last_exc: Exception | None = None
     for attempt in range(3):
         try:

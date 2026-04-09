@@ -8,6 +8,9 @@ from datetime import date, datetime, time, timedelta
 
 from .models import Event
 
+# Used only for scheduling: Event.start_at and Event.raw_date_text from the source page.
+# Never uses DB ingestion timestamps (e.g. first_seen_at).
+
 
 def _fold_pl(s: str) -> str:
     """Lowercase and strip Polish diacritics for robust keyword matching."""
@@ -33,7 +36,10 @@ def _next_calendar_weekday(from_day: date, target_weekday: int) -> date:
 
 
 _TIME_O_CLOCK = re.compile(r"\bo\s*(\d{1,2})\s*[:.](\d{2})\b", re.IGNORECASE)
-_TIME_COMPACT = re.compile(r"\b(\d{1,2})\s*[:.](\d{2})\b")
+# Colon only — DD.MM calendar dates must not match as a "time".
+_TIME_COMPACT = re.compile(r"\b(\d{1,2}):(\d{2})\b")
+# Polish day-month numeric: 12.04, 08.05.2026 (before clock time in wroclaw.pl/go strings).
+_DOT_DM = re.compile(r"\b(\d{1,2})\.(\d{1,2})(?:\.(\d{2,4}))?\b")
 
 _REL_DZIS = re.compile(r"\b(dzis|dzisiaj)\b", re.IGNORECASE)
 _REL_JUTRO = re.compile(r"\bjutro\b", re.IGNORECASE)
@@ -85,6 +91,36 @@ def _extract_time_portion(text: str) -> time | None:
     return None
 
 
+def _parsed_dot_date(prefix: str, now: datetime, tm: time | None) -> _Resolved | None:
+    """Take DD.MM[.RRRR] from the part of the string before `o HH:MM` (PL style)."""
+    chosen: date | None = None
+    y_now = now.date().year
+    for m in _DOT_DM.finditer(prefix):
+        dom, mon = int(m.group(1)), int(m.group(2))
+        if not (1 <= mon <= 12 and 1 <= dom <= 31):
+            continue
+        yraw = m.group(3)
+        if yraw:
+            y = int(yraw)
+            if y < 100:
+                y += 2000
+        else:
+            y = y_now
+        try:
+            cand = date(y, mon, dom)
+        except ValueError:
+            continue
+        if not yraw and cand < now.date():
+            try:
+                cand = date(y + 1, mon, dom)
+            except ValueError:
+                continue
+        chosen = cand
+    if chosen is None:
+        return None
+    return _Resolved(chosen, tm)
+
+
 @dataclass(frozen=True)
 class _Resolved:
     day: date
@@ -109,6 +145,13 @@ def _parse_raw_when(raw: str, now: datetime) -> _Resolved | None:
     folded_line = _fold_pl(t)
     tm = _extract_time_portion(t)
     d = now.date()
+
+    clock_m = _TIME_O_CLOCK.search(t)
+    prefix = t[: clock_m.start()] if clock_m else t
+
+    dotted = _parsed_dot_date(prefix, now, tm)
+    if dotted is not None:
+        return dotted
 
     if _REL_DZIS.search(folded_line):
         return _Resolved(d, tm)
@@ -150,6 +193,7 @@ def _parse_raw_when(raw: str, now: datetime) -> _Resolved | None:
 
 
 def resolve_when(ev: Event, now: datetime) -> _Resolved | None:
+    """Resolve when the event occurs (start), never when it was scraped or stored."""
     r = _coerce_start_at(ev, now)
     if r is not None:
         return r

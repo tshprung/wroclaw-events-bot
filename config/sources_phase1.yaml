@@ -128,7 +128,7 @@ sources:
 
   - id: muzeum_miejskie
     name: Muzeum Miejskie Wrocławia
-    url: https://www.muzeumwroclaw.pl/
+    url: https://muzeum.miejskie.wroclaw.pl/
     kind: generic_links
     enabled: true
 
