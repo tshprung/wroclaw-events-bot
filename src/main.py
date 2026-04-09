@@ -279,8 +279,14 @@ def main() -> int:
                             log.info("[DRY_RUN] New: %s", _short(msg, 220))
                         else:
                             assert telegram is not None
-                            telegram.send_message(settings.telegram_channel_id, msg)
-                            posts_sent += 1
+                            try:
+                                telegram.send_message(settings.telegram_channel_id, msg)
+                                posts_sent += 1
+                            except RuntimeError as e:
+                                log.error(
+                                    "Telegram channel post failed (events are still saved): %s",
+                                    e,
+                                )
 
                 conn.commit()
             except requests.exceptions.RequestException as e:
@@ -318,8 +324,11 @@ def main() -> int:
                 log.info("[DRY_RUN] Digest:\n%s", _short(digest_msg, 2000))
             else:
                 assert telegram is not None
-                telegram.send_message(settings.telegram_channel_id, digest_msg)
-                posts_sent += 1
+                try:
+                    telegram.send_message(settings.telegram_channel_id, digest_msg)
+                    posts_sent += 1
+                except RuntimeError as e:
+                    log.error("Telegram digest failed (events are still saved): %s", e)
 
         # Admin alert on repeated failures/blocks
         alerts = list_source_health_alerts(conn)

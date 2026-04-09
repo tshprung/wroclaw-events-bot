@@ -124,6 +124,33 @@ def _slug_title_from_go_url(url: str) -> str:
     return _clean(m.group(1).replace("-", " "))
 
 
+# Also appears inside HTML/JSON payloads as href="wydarzenia/<kategoria>/<id>-<slug>" (no /go prefix).
+_WRO_RAW_REL_DETAIL = re.compile(
+    r"wydarzenia/([a-z0-9_-]+)/(\d+-[a-z0-9-]+)",
+    re.IGNORECASE,
+)
+
+
+def _wroclaw_go_site_origin(listing_url: str) -> str:
+    p = urlparse(listing_url)
+    return f"{p.scheme}://{p.netloc}"
+
+
+def _wroclaw_go_extra_detail_urls(html: str, listing_url: str) -> list[str]:
+    """Many listing pages embed canonical paths only in JSON/router blobs, not in <a href>."""
+    origin = _wroclaw_go_site_origin(listing_url)
+    found: set[str] = set()
+    for cat, rest in _WRO_RAW_REL_DETAIL.findall(html):
+        abs_u = urljoin(origin, f"/go/wydarzenia/{cat}/{rest}").rstrip("/")
+        if _GO_EVENT_PATH.search(urlparse(abs_u).path or ""):
+            found.add(abs_u)
+    for m in re.finditer(r"/go/wydarzenia/[a-z0-9_-]+/\d+-[a-z0-9-]+", html, re.IGNORECASE):
+        abs_u = urljoin(origin, m.group(0)).rstrip("/")
+        if _GO_EVENT_PATH.search(urlparse(abs_u).path or ""):
+            found.add(abs_u)
+    return list(found)
+
+
 def _abs_http_url(u: str | None, base_page: str) -> str | None:
     if not u or not isinstance(u, str):
         return None
@@ -396,7 +423,15 @@ def parse_wroclaw_go(source: Source, html: str) -> list[Event]:
         limit=400,
         allow_empty_text=True,
     )
-    cand = [(t, u) for t, u in links if _GO_EVENT_PATH.search(u) and (t or _slug_title_from_go_url(u))]
+    by_u: dict[str, tuple[str, str]] = {}
+    for t, u in links:
+        u = (u or "").strip().rstrip("/")
+        if not u or not _GO_EVENT_PATH.search(u) or not (t or _slug_title_from_go_url(u)):
+            continue
+        by_u[u] = (t, u)
+    for u in _wroclaw_go_extra_detail_urls(html, source.url):
+        by_u.setdefault(u, ("", u))
+    cand = list(by_u.values())
     rows = _wroclaw_go_ld_rows(html, source.url)
     used_urls: set[str] = set()
     out: list[Event] = []
