@@ -120,12 +120,21 @@ def parse_generic_links(source: Source, html: str) -> list[Event]:
     return out
 
 
+_GO_EVENT_PATH = re.compile(r"/go/wydarzenia/wydarzenia/[^/]+/\d", re.IGNORECASE)
+
+
 def parse_wroclaw_go(source: Source, html: str) -> list[Event]:
-    # wroclaw.pl/go list pages include “Title Dziś o 18:00 Venue” in anchor text.
-    links = extract_links(source.url, html, selector="a[href]", limit=120)
+    # Real event cards use /go/wydarzenia/wydarzenia/<kategoria>/<id>-<slug> — not nav/footer
+    # links that only mention /go/wydarzenia/. Scanning the first N generic <a href> hits mostly menus.
+    links = extract_links(
+        source.url,
+        html,
+        selector="a[href*='/go/wydarzenia/wydarzenia/']",
+        limit=200,
+    )
     out: list[Event] = []
     for text, url in links:
-        if "/go/wydarzenia/" not in url:
+        if not _GO_EVENT_PATH.search(url):
             continue
         out.append(_parse_wroclaw_go_anchor(source.id, text, url))
     # Filter out empties

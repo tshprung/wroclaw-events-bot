@@ -12,7 +12,7 @@ from dotenv import load_dotenv
 from dateutil import tz
 
 from .config import load_settings
-from .event_window import filter_events_in_window, load_window_options
+from .event_window import filter_events_in_window, load_window_options, resolve_when
 from .dedupe import fingerprint
 from .health import should_admin_alert
 from .models import Event, Source
@@ -127,7 +127,13 @@ def main() -> int:
     posts_sent = 0
     post_mode = os.environ.get("POST_MODE", "immediate").strip().lower()  # immediate|digest
     digest_lines: list[str] = []
-    window_days, _window_undated = load_window_options()
+    window_days, window_include_undated = load_window_options()
+    log.info(
+        "Event window: days=%d include_undated=%s TIMEZONE=%s (set via EVENT_WINDOW_* / TIMEZONE)",
+        window_days,
+        window_include_undated,
+        settings.timezone,
+    )
 
     try:
         for src in sources:
@@ -158,6 +164,20 @@ def main() -> int:
                         len(events),
                         len(events_raw),
                         window_days,
+                    )
+                if (
+                    src.kind == "wroclaw_go"
+                    and events_raw
+                    and not events
+                ):
+                    s0 = events_raw[0]
+                    log.warning(
+                        "[%s] wroclaw.pl/go: 0 kept of %d. Example row title=%r raw_date_text=%r resolve_when=%r",
+                        src.id,
+                        len(events_raw),
+                        _short(s0.title, 100),
+                        s0.raw_date_text,
+                        resolve_when(s0, now_local),
                     )
 
                 upsert_source_health(
