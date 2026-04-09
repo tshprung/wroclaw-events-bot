@@ -26,20 +26,22 @@ jobs:
       - name: Ensure deploy dir exists on VM
         run: |
           PORT="${VM_PORT:-22}"
-          APP_DIR="${VM_APP_DIR:-$HOME/wroclaw-events-bot}"
+          # IMPORTANT: don't use the GitHub runner's $HOME for remote paths.
+          # Default to the remote user's home dir.
+          APP_DIR="${VM_APP_DIR:-~/wroclaw-events-bot}"
           ssh -p "$PORT" "${{ secrets.VM_USER }}@${{ secrets.VM_HOST }}" "bash -lc 'mkdir -p \"$APP_DIR\"'"
 
       - name: Upload tarball to VM
         run: |
           PORT="${VM_PORT:-22}"
-          APP_DIR="${VM_APP_DIR:-$HOME/wroclaw-events-bot}"
+          APP_DIR="${VM_APP_DIR:-~/wroclaw-events-bot}"
           tar --exclude=".git" --exclude=".venv" --exclude="data" -czf app.tgz .
           scp -P "$PORT" app.tgz "${{ secrets.VM_USER }}@${{ secrets.VM_HOST }}:$APP_DIR/app.tgz"
 
       - name: Extract + install deps on VM
         run: |
           PORT="${VM_PORT:-22}"
-          APP_DIR="${VM_APP_DIR:-$HOME/wroclaw-events-bot}"
+          APP_DIR="${VM_APP_DIR:-~/wroclaw-events-bot}"
           ssh -p "$PORT" "${{ secrets.VM_USER }}@${{ secrets.VM_HOST }}" 'bash -lc "
             set -euo pipefail
             cd '"$APP_DIR"'
