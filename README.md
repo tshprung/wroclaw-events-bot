@@ -44,6 +44,16 @@ Run:
 
 This repo includes a workflow: [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml).
 
+### One-time GitHub repo setup (local → GitHub)
+
+1. Create a new GitHub repository (public or private).
+2. Add it as `origin` and push:
+
+```bash
+git remote add origin <YOUR_GITHUB_REPO_SSH_URL>
+git push -u origin main
+```
+
 ### One-time manual VM steps
 
 1. Install prerequisites:
