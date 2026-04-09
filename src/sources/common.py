@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import Iterable
+import time
 from urllib.parse import urljoin
 
 import requests
@@ -28,8 +28,17 @@ def fetch_url(session: requests.Session, url: str, *, timeout: tuple = (5, 20)) 
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
         "Accept-Language": "pl-PL,pl;q=0.9,en;q=0.8",
     }
-    r = session.get(url, timeout=timeout, headers=headers, allow_redirects=True)
-    return FetchResult(status_code=r.status_code, text=r.text, final_url=str(r.url))
+    last_exc: Exception | None = None
+    for attempt in range(3):
+        try:
+            r = session.get(url, timeout=timeout, headers=headers, allow_redirects=True)
+            return FetchResult(status_code=r.status_code, text=r.text, final_url=str(r.url))
+        except requests.exceptions.RequestException as e:
+            last_exc = e
+            # small exponential backoff with jitterless simplicity
+            time.sleep(0.6 * (2**attempt))
+    assert last_exc is not None
+    raise last_exc
 
 
 def soup(html: str) -> BeautifulSoup:

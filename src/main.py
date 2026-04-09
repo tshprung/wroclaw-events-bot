@@ -182,6 +182,19 @@ def main() -> int:
                         posts_sent += 1
 
                 conn.commit()
+            except requests.exceptions.RequestException as e:
+                # Network/proxy blocks are common; avoid full stack traces spam.
+                upsert_source_health(
+                    conn,
+                    src.id,
+                    src.url,
+                    ok=False,
+                    error_kind="request_error",
+                    error_detail=str(e)[:300],
+                )
+                conn.commit()
+                total_fail += 1
+                log.warning("[%s] request error: %s", src.id, str(e)[:220])
             except Exception as e:
                 upsert_source_health(
                     conn,
