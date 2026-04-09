@@ -132,17 +132,34 @@ def parse_wroclaw_go(source: Source, html: str) -> list[Event]:
     return [e for e in out if e.title]
 
 
+# Start of the "when" chunk on wroclaw.pl/go listing anchors (often: Title WHEN ...optional venue...).
+_WROCLAW_GO_WHEN = re.compile(
+    r"\b(Dziś|Dzisiaj|Jutro|Pojutrze|"
+    r"Sobota|Niedziela|Poniedziałek|Wtorek|Środa|Czwartek|Piątek)\b",
+    re.IGNORECASE,
+)
+# After the when-clause, venue often follows "o HH:MM".
+_WROCLAW_GO_AFTER_TIME_VENUE = re.compile(
+    r"^(.+?\bo\s*\d{1,2}\s*[:.]\s*\d{2})(?:\s+(.+))?$",
+    re.IGNORECASE,
+)
+
+
 def _parse_wroclaw_go_anchor(source_id: str, text: str, url: str) -> Event:
     text = _clean(text)
-    # Example: "Vertigo Swing Orchestra Old vs New Dziś o 19:00 Vertigo Jazz Club & Restaurant"
-    m = re.search(r"^(?P<title>.+?)\s+(?P<when>(?:Dziś|Jutro|Pojutrze|Sobota|Niedziela|Poniedziałek|Wtorek|Środa|Czwartek|Piątek).+?)\s+(?P<venue>.+)$", text)
     title = text
     when_txt = None
     venue = None
-    if m:
-        title = _clean(m.group("title"))
-        when_txt = _clean(m.group("when"))
-        venue = _clean(m.group("venue"))
+    wm = _WROCLAW_GO_WHEN.search(text)
+    if wm:
+        title = _clean(text[: wm.start()].strip())
+        tail = _clean(text[wm.start() :].strip())
+        when_txt = tail
+        mtv = _WROCLAW_GO_AFTER_TIME_VENUE.match(tail)
+        if mtv:
+            when_txt = _clean(mtv.group(1).strip())
+            if mtv.group(2):
+                venue = _clean(mtv.group(2).strip())
     return Event(source_id=source_id, title=title, start_at=None, venue=venue, url=url, raw_date_text=when_txt)
 
 
