@@ -1,0 +1,8 @@
+---
+description: After implementing changes, commit and push unless the user explicitly says not to.
+alwaysApply: true
+---
+
+# Git: default push
+
+When you finish code or config changes in this repo, **commit with a clear message and push to `origin`** as part of the same session. Skip push only if the user explicitly asks you not to (e.g. “don’t push”, “local only”).
