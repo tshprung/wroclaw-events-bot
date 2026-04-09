@@ -9,7 +9,7 @@ from urllib.parse import quote, unquote, urljoin, urlparse
 
 from dateutil import parser as dtparser
 from dateutil import tz as dttz
-from rapidfuzz.fuzz import token_sort_ratio
+from rapidfuzz.fuzz import partial_ratio, token_set_ratio, token_sort_ratio
 
 from ..models import Event, Source
 from .common import extract_links, soup
@@ -125,8 +125,9 @@ def _slug_title_from_go_url(url: str) -> str:
 
 
 # Also appears inside HTML/JSON payloads as href="wydarzenia/<kategoria>/<id>-<slug>" (no /go prefix).
+# Slug may contain "+" (e.g. "dla-dzieci-6+") or other chars — do not restrict to [a-z0-9-].
 _WRO_RAW_REL_DETAIL = re.compile(
-    r"wydarzenia/([a-z0-9_-]+)/(\d+-[a-z0-9-]+)",
+    r"wydarzenia/([a-z0-9_-]+)/(\d+-[^/\s\"'<>]+)",
     re.IGNORECASE,
 )
 
@@ -144,7 +145,7 @@ def _wroclaw_go_extra_detail_urls(html: str, listing_url: str) -> list[str]:
         abs_u = urljoin(origin, f"/go/wydarzenia/{cat}/{rest}").rstrip("/")
         if _GO_EVENT_PATH.search(urlparse(abs_u).path or ""):
             found.add(abs_u)
-    for m in re.finditer(r"/go/wydarzenia/[a-z0-9_-]+/\d+-[a-z0-9-]+", html, re.IGNORECASE):
+    for m in re.finditer(r"/go/wydarzenia/[a-z0-9_-]+/\d+-[^/\s\"'<>]+", html, re.IGNORECASE):
         abs_u = urljoin(origin, m.group(0)).rstrip("/")
         if _GO_EVENT_PATH.search(urlparse(abs_u).path or ""):
             found.add(abs_u)
@@ -286,10 +287,19 @@ def _go_synthetic_detail_url(listing_base: str, name: str, st: datetime) -> str:
     return f"{listing_base.rstrip('/')}#evt-{q}"
 
 
+def _normalize_title_for_slug_fuzz(title: str) -> str:
+    """LD titles often use |, [], age markers — strip for comparing to URL slug tokens."""
+    t = _clean(title)
+    t = re.sub(r"[\[\]|]+", " ", t)
+    t = re.sub(r"\([^)]*\)", " ", t)
+    t = t.replace("+", " plus ")
+    return _clean(t)
+
+
 def _best_url_for_ld_name(ld_name: str, cand: list[tuple[str, str]], used_urls: set[str]) -> str | None:
     best_u: str | None = None
     best_sc = 0
-    fn = _fold_match(ld_name)
+    fn = _fold_match(_normalize_title_for_slug_fuzz(ld_name))
     for text, url in cand:
         if url in used_urls:
             continue
@@ -297,17 +307,23 @@ def _best_url_for_ld_name(ld_name: str, cand: list[tuple[str, str]], used_urls: 
         if text:
             at = _anchor_card_title(text)
             if at:
-                scores.append(token_sort_ratio(fn, _fold_match(at)))
+                am = _fold_match(at)
+                scores.append(token_sort_ratio(fn, am))
+                scores.append(token_set_ratio(fn, am))
         slug_t = _slug_title_from_go_url(url)
         if slug_t:
-            scores.append(token_sort_ratio(fn, _fold_match(slug_t)))
+            sm = _fold_match(slug_t)
+            scores.append(token_sort_ratio(fn, sm))
+            scores.append(token_set_ratio(fn, sm))
+            if len(slug_t) >= 8:
+                scores.append(partial_ratio(fn, sm))
         if not scores:
             continue
         sc = max(scores)
         if sc > best_sc:
             best_sc = sc
             best_u = url
-    return best_u if best_sc >= 74 else None
+    return best_u if best_sc >= 72 else None
 
 
 def _wroclaw_go_url_rank(url: str) -> int:

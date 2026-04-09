@@ -14,6 +14,7 @@ from dateutil import tz
 from .config import load_settings
 from .event_window import filter_events_in_window, load_window_options, resolve_when
 from .dedupe import fingerprint
+from .exclusions import filter_out_excluded_events
 from .health import should_admin_alert
 from .models import Event, Source
 from .storage import connect, insert_event_if_new, upsert_source_health
@@ -233,6 +234,9 @@ def main() -> int:
                         len(events_raw),
                         window_days,
                     )
+                events, n_excl = filter_out_excluded_events(events)
+                if n_excl:
+                    log.info("[%s] exclusions: dropped %d", src.id, n_excl)
                 if (
                     src.kind == "wroclaw_go"
                     and events_raw
