@@ -171,7 +171,7 @@ sources:
 
   - id: teatr_lalek_wroclaw
     name: Wrocławski Teatr Lalek
-    url: https://lalek.wroclaw.pl/
+    url: https://www.teatrlalek.wroclaw.pl/pl/repertuar-wtl
     kind: generic_links
     enabled: true
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from dataclasses import dataclass
 import time
 from urllib.parse import urljoin
@@ -10,6 +11,22 @@ import urllib3
 from bs4 import BeautifulSoup
 
 log = logging.getLogger(__name__)
+
+
+def _http_timeout() -> tuple[float, float]:
+    """(connect, read) seconds; override with HTTP_FETCH_TIMEOUT=connect,read e.g. 15,45."""
+    raw = (os.environ.get("HTTP_FETCH_TIMEOUT") or "").strip()
+    if raw:
+        parts = [p.strip() for p in raw.replace(" ", ",").split(",") if p.strip()]
+        try:
+            if len(parts) >= 2:
+                return (float(parts[0]), float(parts[1]))
+            if len(parts) == 1:
+                v = float(parts[0])
+                return (v, max(v * 2.5, 30.0))
+        except ValueError:
+            pass
+    return (10.0, 35.0)
 
 
 @dataclass(frozen=True)
@@ -23,7 +40,7 @@ def fetch_url(
     session: requests.Session,
     url: str,
     *,
-    timeout: tuple = (5, 20),
+    timeout: tuple[float, float] | None = None,
     verify: bool | str = True,
 ) -> FetchResult:
 
@@ -38,6 +55,9 @@ def fetch_url(
     }
     if verify is False:
         urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+    if timeout is None:
+        timeout = _http_timeout()
 
     last_exc: Exception | None = None
     for attempt in range(3):
