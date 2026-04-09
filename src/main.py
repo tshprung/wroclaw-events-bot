@@ -335,7 +335,20 @@ def main() -> int:
                     log.warning("[DRY_RUN] Admin alert would be sent:\n%s", _short(alert_msg, 2000))
                 else:
                     assert telegram is not None
-                    telegram.send_message(settings.admin_telegram_id, alert_msg, disable_web_preview=True)
+                    try:
+                        telegram.send_message(
+                            settings.admin_telegram_id,
+                            alert_msg,
+                            disable_web_preview=True,
+                        )
+                    except RuntimeError as e:
+                        log.warning(
+                            "Admin Telegram alert failed (%s). "
+                            "Use your numeric user id, message /start to the bot in private chat, "
+                            "or unset ADMIN_TELEGRAM_ID. Alert text:\n%s",
+                            e,
+                            _short(alert_msg, 2000),
+                        )
             else:
                 log.warning("%s", alert_msg)
 
