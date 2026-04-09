@@ -57,7 +57,7 @@ git push -u origin main
 ### One-time manual VM steps
 
 1. Install prerequisites:
-   - `python3`, `python3-venv`, `git`, `cron`, `rsync`
+   - `python3`, `python3-venv`, `git`, `cron`
 2. Create the app dir:
    - `/opt/wroclaw-events-bot`
 3. Create `/opt/wroclaw-events-bot/.env`:
@@ -84,7 +84,6 @@ Add these secrets in your GitHub repo settings:
 - `VM_USER` (e.g. `tal`)
 - `VM_SSH_KEY` (private key for SSH deploy)
 - Optional: `VM_SSH_PORT` (default 22)
-- Optional: `VM_APP_DIR` (default `/opt/wroclaw-events-bot`; set this if your SSH user cannot write to `/opt`)
 
 ## Source health
 

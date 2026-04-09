@@ -8,48 +8,23 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    env:
-      VM_PORT: ${{ secrets.VM_SSH_PORT }}
-      VM_APP_DIR: ${{ secrets.VM_APP_DIR }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v5
-
-      - name: Setup SSH key
-        run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.VM_SSH_KEY }}" > ~/.ssh/id_rsa
-          chmod 600 ~/.ssh/id_rsa
-          PORT="${VM_PORT:-22}"
-          ssh-keyscan -p "$PORT" "${{ secrets.VM_HOST }}" >> ~/.ssh/known_hosts
-
-      - name: Ensure deploy dir exists on VM
-        run: |
-          PORT="${VM_PORT:-22}"
-          # IMPORTANT: don't use the GitHub runner's $HOME for remote paths.
-          # Default to the remote user's home dir.
-          APP_DIR="${VM_APP_DIR:-~/wroclaw-events-bot}"
-          ssh -p "$PORT" "${{ secrets.VM_USER }}@${{ secrets.VM_HOST }}" "bash -lc 'mkdir -p \"$APP_DIR\"'"
-
-      - name: Upload tarball to VM
-        run: |
-          PORT="${VM_PORT:-22}"
-          APP_DIR="${VM_APP_DIR:-~/wroclaw-events-bot}"
-          tar --exclude=".git" --exclude=".venv" --exclude="data" -czf app.tgz .
-          scp -P "$PORT" app.tgz "${{ secrets.VM_USER }}@${{ secrets.VM_HOST }}:$APP_DIR/app.tgz"
-
-      - name: Extract + install deps on VM
-        run: |
-          PORT="${VM_PORT:-22}"
-          APP_DIR="${VM_APP_DIR:-~/wroclaw-events-bot}"
-          ssh -p "$PORT" "${{ secrets.VM_USER }}@${{ secrets.VM_HOST }}" 'bash -lc "
+      - name: Deploy via SSH (git pull on VM)
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          port: ${{ secrets.VM_SSH_PORT }}
+          script: |
             set -euo pipefail
-            cd '"$APP_DIR"'
-            tar -xzf app.tgz
-            rm -f app.tgz
-            python3 -m venv .venv
+            cd /opt/wroclaw-events-bot
+            git pull --ff-only
+            if [ ! -d ".venv" ]; then
+              python3 -m venv .venv
+            fi
             ./.venv/bin/python -m pip install --upgrade pip
             ./.venv/bin/python -m pip install -r requirements.txt
             mkdir -p data
-          "'
+            echo "Deploy done at $(date)"
 
