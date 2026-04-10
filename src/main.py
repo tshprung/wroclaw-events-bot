@@ -265,10 +265,12 @@ def main() -> int:
                 )
                 total_ok += 1
 
+                new_for_source = 0
                 for ev in events:
                     fp = fingerprint(ev)
                     if insert_event_if_new(conn, fp, ev):
                         new_events += 1
+                        new_for_source += 1
                         msg = format_event_message(
                             title=ev.title,
                             when=ev.raw_date_text,
@@ -294,6 +296,14 @@ def main() -> int:
                                     "Telegram channel post failed (events are still saved): %s",
                                     e,
                                 )
+
+                log.info(
+                    "[%s] parsed=%d kept=%d new=%d",
+                    src.id,
+                    len(events_raw),
+                    len(events),
+                    new_for_source,
+                )
 
                 conn.commit()
             except requests.exceptions.RequestException as e:
