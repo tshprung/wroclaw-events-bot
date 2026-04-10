@@ -620,10 +620,21 @@ def parse_meetup_find(source: Source, html: str) -> list[Event]:
     for text, url in links:
         if "/events/" not in url:
             continue
-        if url in seen:
+        # Drop tracking parameters so we don't treat the same event as new.
+        # Example: .../events/313562179/?recId=...&searchId=...
+        p = urlparse(url)
+        if not (p.scheme and p.netloc and p.path):
             continue
-        seen.add(url)
-        out.append(Event(source_id=source.id, title=_clean(text), start_at=None, venue=None, url=url))
+        clean_url = f"{p.scheme}://{p.netloc}{p.path}"
+        if "/events/" not in clean_url:
+            continue
+        # Meetup canonical permalinks end with a trailing slash.
+        if not clean_url.endswith("/"):
+            clean_url += "/"
+        if clean_url in seen:
+            continue
+        seen.add(clean_url)
+        out.append(Event(source_id=source.id, title=_clean(text), start_at=None, venue=None, url=clean_url))
     return out
 
 
