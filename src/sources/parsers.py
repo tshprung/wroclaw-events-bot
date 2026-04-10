@@ -703,11 +703,15 @@ def parse_kino_nh(source: Source, html: str) -> list[Event]:
         p = urlparse(url)
         host = (p.netloc or "").lower()
         path = (p.path or "").lower()
+        query = (p.query or "").lower()
         if "kinonh.pl" not in host:
             continue
         if path.rstrip("/") in ("", "/"):
             continue
         if "/resetujpass" in path:
+            continue
+        # Ticket purchase / repertory showtimes are not "events" for this bot.
+        if path.rstrip("/") == "/bilet.s" or "eventid=" in query:
             continue
         looks = any(
             x in path
@@ -725,6 +729,8 @@ def parse_kino_nh(source: Source, html: str) -> list[Event]:
             continue
         t = _clean(text)
         if not t or _JUNK_TITLE_RE.match(t):
+            continue
+        if re.search(r"\bkup\s+bilet\b", t, re.IGNORECASE):
             continue
         if url in seen:
             continue

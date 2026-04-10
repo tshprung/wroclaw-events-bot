@@ -27,12 +27,16 @@ _DEFAULT_URL_PARTS: frozenset[str] = frozenset(
         "muzeumarchitektury.pl",
         "muzeum.miejskie.wroclaw",
         "bwa.wroc.pl",
+        # Static info pages, not events.
+        "zoo.wroclaw.pl/zwiedzanie/godziny-otwarcia",
         # Senior-care site at staryklasztor.pl (not Wrocław club); drop if linked elsewhere.
         "staryklasztor.pl",
         # WTeatrW CMS: /Repertuar,N is the repertoire index, not a single show.
         "wteatrw.pl/repertuar,",
         # GoOut marketing / shop list, not events (other pages may still link here).
         "goout.net/pl/ticket-shops",
+        # Kino Nowe Horyzonty ticketing / showtimes (not "events" for this bot).
+        "kinonh.pl/bilet.s",
         # WTL: permanent show pages under /pl/spektakle/…, not dated performances.
         "teatrlalek.wroclaw.pl/pl/spektakle/",
     }
