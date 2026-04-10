@@ -10,6 +10,7 @@ from .models import Event
 
 _SPACE_RE = re.compile(r"\s+")
 _FB_EVENT_ID_IN_URL = re.compile(r"facebook\.com/events/(\d+)", re.I)
+_MEETUP_EVENT_ID_IN_URL = re.compile(r"meetup\.com/.*/events/(\d+)", re.I)
 
 
 def _norm(s: str) -> str:
@@ -23,6 +24,10 @@ def fingerprint(ev: Event) -> str:
     mfb = _FB_EVENT_ID_IN_URL.search(ev.url or "")
     if mfb:
         return f"fb:{mfb.group(1)}"
+    # Same for Meetup: titles on listing pages can include volatile counts/badges.
+    mmu = _MEETUP_EVENT_ID_IN_URL.search(ev.url or "")
+    if mmu:
+        return f"meetup:{mmu.group(1)}"
     title = _norm(ev.title)
     venue = _norm(ev.venue or "")
     start = ev.start_at.isoformat() if ev.start_at else ""
