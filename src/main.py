@@ -20,7 +20,7 @@ from .models import Event, Source
 from .storage import connect, insert_event_if_new, upsert_source_health
 from .storage import list_source_health_alerts
 from .telegram import TelegramClient, format_event_message
-from .sources.common import fetch_facebook_event_search, fetch_url
+from .sources.common import extract_social_image_url, fetch_facebook_event_search, fetch_url
 from .sources.parsers import parser_for_kind
 
 
@@ -289,7 +289,19 @@ def main() -> int:
                         else:
                             assert telegram is not None
                             try:
-                                telegram.send_message(settings.telegram_channel_id, msg)
+                                # Best-effort: attach a cover image when the event page exposes one.
+                                img_url: str | None = None
+                                try:
+                                    res2 = fetch_url(session, ev.url, verify=src.verify_ssl)
+                                    if res2.status_code < 400:
+                                        img_url = extract_social_image_url(res2.final_url or ev.url, res2.text)
+                                except Exception:
+                                    img_url = None
+
+                                if img_url:
+                                    telegram.send_photo(settings.telegram_channel_id, img_url, caption=msg)
+                                else:
+                                    telegram.send_message(settings.telegram_channel_id, msg)
                                 posts_sent += 1
                             except RuntimeError as e:
                                 log.error(

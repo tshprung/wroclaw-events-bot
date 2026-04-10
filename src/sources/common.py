@@ -182,3 +182,25 @@ def extract_links(
             break
     return out
 
+
+def extract_social_image_url(base_url: str, html: str) -> str | None:
+    """Best-effort cover image from OpenGraph/Twitter/meta tags."""
+    s = soup(html)
+    candidates: list[str] = []
+    for sel in (
+        'meta[property="og:image"]',
+        'meta[property="og:image:secure_url"]',
+        'meta[name="twitter:image"]',
+        'meta[name="twitter:image:src"]',
+        'meta[itemprop="image"]',
+    ):
+        for m in s.select(sel):
+            c = (m.get("content") or "").strip()
+            if c:
+                candidates.append(c)
+    for c in candidates:
+        u = urljoin(base_url, c)
+        if u.startswith("https://") or u.startswith("http://"):
+            return u
+    return None
+
