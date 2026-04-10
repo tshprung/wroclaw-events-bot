@@ -665,10 +665,17 @@ def parse_nfm_repertuar(source: Source, html: str) -> list[Event]:
     for text, url in links:
         if "/component/nfmcalendar/event/" not in url:
             continue
-        if url in seen:
+        # Strip tracking parameters (occasionally present on share links).
+        p = urlparse(url)
+        if not (p.scheme and p.netloc and p.path):
             continue
-        seen.add(url)
-        out.append(Event(source_id=source.id, title=_clean(text), start_at=None, venue="NFM", url=url))
+        clean_url = f"{p.scheme}://{p.netloc}{p.path}"
+        if not clean_url.startswith(("http://", "https://")):
+            continue
+        if clean_url in seen:
+            continue
+        seen.add(clean_url)
+        out.append(Event(source_id=source.id, title=_clean(text), start_at=None, venue="NFM", url=clean_url))
     return out
 
 
