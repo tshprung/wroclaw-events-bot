@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import os
 import re
 from collections import defaultdict
 from datetime import date, datetime, timezone, tzinfo
 from urllib.parse import unquote, urlparse
+
+from dateutil import tz as dttz
 
 from rapidfuzz.fuzz import token_set_ratio
 
@@ -15,6 +18,12 @@ _FB_EVENT_ID_IN_URL = re.compile(r"facebook\.com/events/(\d+)", re.I)
 _MEETUP_EVENT_ID_IN_URL = re.compile(r"meetup\.com/.*/events/(\d+)", re.I)
 _GO_PATH_EVENT_ID = re.compile(r"/go/wydarzenia/[^/]+/(\d+)-", re.I)
 _GO_PATH_TAIL = re.compile(r"/go/wydarzenia/([^/]+)/(\d+)-([^/]+)$", re.I)
+
+
+def _fingerprint_local_tz() -> tzinfo:
+    name = os.environ.get("TIMEZONE", "Europe/Warsaw")
+    z = dttz.gettz(name)
+    return z if z is not None else timezone.utc
 
 
 def _norm(s: str) -> str:
@@ -35,16 +44,20 @@ def _wroclaw_go_numeric_id(url: str) -> str | None:
 
 
 def _go_fingerprint_time_key(ev: Event) -> str:
-    """UTC minute bucket so the same performance dedupes; distinct shows keep distinct rows."""
+    """Local calendar date (TIMEZONE) so the same city listing dedupes across parsers/sources.
+
+    Minute-level UTC keys split one performance when startDate varies (midnight vs real hour,
+    JSON-LD vs anchor) or when the same id is scraped from several configured wroclaw_go URLs.
+    """
     if not ev.start_at:
         return "undated"
     t = ev.start_at
+    loc = _fingerprint_local_tz()
     if t.tzinfo is None:
-        t = t.replace(tzinfo=timezone.utc)
+        t = t.replace(tzinfo=loc)
     else:
-        t = t.astimezone(timezone.utc)
-    t = t.replace(second=0, microsecond=0)
-    return t.isoformat()
+        t = t.astimezone(loc)
+    return t.date().isoformat()
 
 
 def _wroclaw_go_path_tail(url: str) -> tuple[str | None, str | None, str | None]:
@@ -82,14 +95,14 @@ def collapse_wroclaw_go_twin_listings(events: list[Event], local_tz: tzinfo) -> 
         if len(members) <= 1:
             continue
 
-        def slug_len(ev: Event) -> int:
+        def score(it: tuple[int, Event]) -> tuple[int, int]:
+            _idx, ev = it
             _c, _i, sl = _wroclaw_go_path_tail(ev.url)
-            return len(sl or "")
+            return (len(sl or ""), len(ev.url or ""))
 
-        best = max((ev for _idx, ev in members), key=lambda ev: (slug_len(ev), len(ev.url or "")))
-        best_key = (best.url, _go_fingerprint_time_key(best))
-        for idx, ev in members:
-            if (ev.url, _go_fingerprint_time_key(ev)) != best_key:
+        best_idx, _best_ev = max(members, key=score)
+        for idx, _ev in members:
+            if idx != best_idx:
                 drop_idx.add(idx)
 
     if not drop_idx:
@@ -108,7 +121,7 @@ def fingerprint(ev: Event) -> str:
         return f"meetup:{mmu.group(1)}"
     goid = _wroclaw_go_numeric_id(ev.url or "")
     if goid:
-        # Include start time so recurring runs do not reuse one row (and re-alert after prune).
+        # Local date: same id + day is one row; recurring dates get new keys after prune.
         return f"go:{goid}:{_go_fingerprint_time_key(ev)}"
     title = _norm(ev.title)
     venue = _norm(ev.venue or "")
