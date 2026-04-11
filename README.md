@@ -4,7 +4,7 @@ Collect upcoming events in Wrocław from ~30 **HTTP-only** sources (no login/cap
 
 ## How it runs
 
-- Intended schedule: **every 3 hours**, **06:00–21:00 Europe/Warsaw** (cron on the VM).
+- Intended schedule: **hourly at :05**, **06:05–21:05 Europe/Warsaw** (cron on the VM; the bot still only *does work* between 06:00 and 21:59 local).
 - Each run:
   - fetches sources listed in [`config/sources_phase1.yaml`](config/sources_phase1.yaml)
   - parses list pages (and optional detail pages where enabled)
@@ -70,11 +70,14 @@ git push -u origin main
    - optional `MAX_POSTS_PER_RUN=30`
 4. Ensure timezone is correct (recommended):
    - set VM timezone to `Europe/Warsaw` **or** use `CRON_TZ=Europe/Warsaw` in crontab
-5. Add cron entry (runs at 06:00, 09:00, 12:00, 15:00, 18:00, 21:00):
+5. Add cron entry — **every hour at minute 5**, only in the hours the bot is allowed to run (06–21):
 
 ```cron
-0 6,9,12,15,18,21 * * * cd /opt/wroclaw-events-bot && /opt/wroclaw-events-bot/.venv/bin/python -m src.main >> /opt/wroclaw-events-bot/data/cron.log 2>&1
+5 6-21 * * * cd /opt/wroclaw-events-bot && /opt/wroclaw-events-bot/.venv/bin/python -m src.main >> /opt/wroclaw-events-bot/data/cron.log 2>&1
 ```
+
+   - Fields are: `minute hour day month weekday` → here: at **:05**, every hour from **06** through **21**, every day.
+   - Alternative: `5 * * * *` runs at **:05 every hour** (00:05–23:05); runs outside 06:00–21:59 still start the process but exit immediately (see `src/main.py` allowed hours).
 
 ### GitHub Actions secrets required
 
