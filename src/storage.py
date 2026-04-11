@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 import sqlite3
 from dataclasses import asdict
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from .models import Event
 
@@ -21,6 +21,15 @@ CREATE TABLE IF NOT EXISTS events (
   city TEXT,
   raw_date_text TEXT,
   first_seen_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_events_start_at_not_null
+  ON events(start_at)
+  WHERE start_at IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS bot_meta (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS source_health (
@@ -49,6 +58,17 @@ CREATE TABLE IF NOT EXISTS runs (
 
 def _now_utc_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _start_at_utc_iso(dt: datetime | None) -> str | None:
+    """Store start times in UTC so TEXT comparisons used for pruning are chronological."""
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    else:
+        dt = dt.astimezone(timezone.utc)
+    return dt.isoformat()
 
 
 def connect(db_path: str) -> sqlite3.Connection:
@@ -111,9 +131,68 @@ def upsert_source_health(
         )
 
 
+_META_LAST_PRUNE = "last_event_prune_at"
+
+
+def maybe_delete_past_events(
+    conn: sqlite3.Connection,
+    *,
+    min_interval_seconds: int,
+    grace_hours: float,
+    now: datetime | None = None,
+) -> int | None:
+    """Remove rows whose scheduled start is in the past (with grace).
+
+    Returns deleted row count, or None if this call skipped the prune (throttle).
+    Rows with ``start_at`` NULL are kept (undated / unknown time).
+
+    Throttling avoids running the DELETE on every bot invocation; when it does
+    run, ``idx_events_start_at_not_null`` keeps the lookup index-backed (range
+    on ``start_at``), not a full table scan.
+    """
+    now_utc = now if now is not None else datetime.now(timezone.utc)
+    if now_utc.tzinfo is None:
+        now_utc = now_utc.replace(tzinfo=timezone.utc)
+
+    row = conn.execute(
+        "SELECT value FROM bot_meta WHERE key = ?",
+        (_META_LAST_PRUNE,),
+    ).fetchone()
+    if row:
+        try:
+            last = datetime.fromisoformat(row[0])
+        except ValueError:
+            last = None
+        else:
+            if last.tzinfo is None:
+                last = last.replace(tzinfo=timezone.utc)
+            if (now_utc - last).total_seconds() < float(min_interval_seconds):
+                return None
+
+    cutoff = now_utc - timedelta(hours=grace_hours)
+    cutoff_iso = cutoff.isoformat()
+    cur = conn.execute(
+        """
+        DELETE FROM events
+        WHERE start_at IS NOT NULL
+          AND start_at < ?
+        """,
+        (cutoff_iso,),
+    )
+    deleted = cur.rowcount
+    conn.execute(
+        """
+        INSERT INTO bot_meta (key, value) VALUES (?, ?)
+        ON CONFLICT(key) DO UPDATE SET value = excluded.value
+        """,
+        (_META_LAST_PRUNE, now_utc.isoformat()),
+    )
+    return deleted
+
+
 def insert_event_if_new(conn: sqlite3.Connection, fingerprint: str, ev: Event) -> bool:
     payload = asdict(ev)
-    start_at = payload["start_at"].isoformat() if payload["start_at"] else None
+    start_at = _start_at_utc_iso(payload["start_at"])
     cur = conn.execute(
         """
         INSERT OR IGNORE INTO events

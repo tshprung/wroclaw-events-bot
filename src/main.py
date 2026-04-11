@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import os
 import pathlib
+import sqlite3
 import uuid
 from datetime import datetime
 
@@ -17,8 +18,8 @@ from .dedupe import fingerprint
 from .exclusions import filter_out_excluded_events
 from .health import should_admin_alert
 from .models import Event, Source
-from .storage import connect, insert_event_if_new, upsert_source_health
-from .storage import list_source_health_alerts
+from .storage import connect, insert_event_if_new, list_source_health_alerts
+from .storage import maybe_delete_past_events, upsert_source_health
 from .telegram import TelegramClient, format_event_message
 from .sources.common import extract_social_image_url, fetch_facebook_event_search, fetch_url
 from .sources.parsers import parser_for_kind
@@ -417,6 +418,23 @@ def main() -> int:
                         )
             else:
                 log.warning("%s", alert_msg)
+
+        if os.environ.get("EVENT_PRUNE_DISABLED", "").strip() != "1":
+            min_iv = int(os.environ.get("EVENT_PRUNE_MIN_INTERVAL_SEC", "21600"))
+            grace_h = float(os.environ.get("EVENT_PRUNE_GRACE_HOURS", "2"))
+            try:
+                removed = maybe_delete_past_events(
+                    conn,
+                    min_interval_seconds=max(0, min_iv),
+                    grace_hours=max(0.0, grace_h),
+                )
+            except sqlite3.Error as e:
+                log.warning("Past-event DB prune failed: %s", e)
+            else:
+                if removed is not None:
+                    conn.commit()
+                    if removed:
+                        log.info("Pruned %d past event row(s) from DB (grace=%sh)", removed, grace_h)
 
         log.info(
             "Run done. sources_ok=%d sources_failed=%d new_events=%d posts_sent=%d",
