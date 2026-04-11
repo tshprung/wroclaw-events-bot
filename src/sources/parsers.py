@@ -591,11 +591,11 @@ def parse_pik(source: Source, html: str) -> list[Event]:
     return out
 
 
-def parse_generic_links(source: Source, html: str) -> list[Event]:
+def parse_generic_links(source: Source, html: str, *, link_limit: int = 50) -> list[Event]:
     # Generic fallback: create low-fidelity “events” from prominent links.
     # This is meant as scaffolding; source-specific parsers should replace it.
     out: list[Event] = []
-    links = extract_links(source.url, html, selector="a[href]", limit=50)
+    links = extract_links(source.url, html, selector="a[href]", limit=link_limit)
     seen = set()
     for text, url in links:
         if not _generic_link_keeps(text, url):
@@ -608,6 +608,47 @@ def parse_generic_links(source: Source, html: str) -> list[Event]:
         seen.add(key)
         out.append(Event(source_id=source.id, title=_clean(text), start_at=None, venue=None, url=url))
     return out
+
+
+def parse_ebilet_pl(source: Source, html: str) -> list[Event]:
+    """eBilet front page — many tiles; higher link cap than default generic scrapes."""
+    return parse_generic_links(source, html, link_limit=120)
+
+
+def parse_nowiny_olesnickie_wydarzenia(source: Source, html: str) -> list[Event]:
+    """Nowiny Oleśnickie — label „Wydarzenia”: article links near text mentioning Wrocław (folded)."""
+    out: list[Event] = []
+    seen: set[str] = set()
+    for m in re.finditer(
+        r"https://www\.nowinyolesnickie\.pl/20\d{2}/\d{2}/[^\"'\s<>]+\.html",
+        html,
+        re.I,
+    ):
+        u = m.group(0).split("#")[0].rstrip("/")
+        if u in seen:
+            continue
+        lo, hi = max(0, m.start() - 800), min(len(html), m.end() + 800)
+        if "wroclaw" not in _fold_match(html[lo:hi]):
+            continue
+        seen.add(u)
+        leaf = unquote(urlparse(u).path.rstrip("/").split("/")[-1].replace(".html", ""))
+        out.append(
+            Event(
+                source_id=source.id,
+                title=_clean(leaf.replace("-", " ")),
+                start_at=None,
+                venue=None,
+                url=u,
+            )
+        )
+    for e in parse_generic_links(source, html, link_limit=120):
+        if e.url in seen:
+            continue
+        if "wroclaw" not in _fold_match(f"{e.title} {e.url}"):
+            continue
+        seen.add(e.url)
+        out.append(e)
+    return out[:100]
 
 
 def parse_wroclaw_go(source: Source, html: str) -> list[Event]:
@@ -889,6 +930,8 @@ def parser_for_kind(kind: str) -> Callable[[Source, str], list[Event]]:
         "pik": parse_pik,
         "crossweb": parse_generic_links,
         "ebilet_city": parse_generic_links,
+        "ebilet_pl": parse_ebilet_pl,
+        "nowiny_olesnickie_wydarzenia": parse_nowiny_olesnickie_wydarzenia,
         "wroclaw_travel_calendar": parse_generic_links,
     }.get(kind, parse_generic_links)
 

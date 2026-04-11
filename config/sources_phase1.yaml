@@ -61,6 +61,12 @@ sources:
     kind: tarczynski_arena
     enabled: true
 
+  - id: tarczynski_arena_events
+    name: Tarczyński Arena — /events/
+    url: https://tarczynskiarenawroclaw.pl/events/
+    kind: tarczynski_arena
+    enabled: true
+
   - id: nfm_repertuar
     name: NFM repertuar
     url: https://www.nfm.wroclaw.pl/repertuar
@@ -85,10 +91,28 @@ sources:
     kind: crossweb
     enabled: true
 
+  - id: krajownik_wroclaw_wydarzenia
+    name: Krajownik — Wrocław / wydarzenia
+    url: https://krajownik.pl/wroclaw/wydarzenia/
+    kind: generic_links
+    enabled: true
+
+  - id: nowiny_olesnickie_wydarzenia_wroclaw
+    name: Nowiny Oleśnickie — Wydarzenia (tylko wpisy z „Wrocław” przy linku)
+    url: https://www.nowinyolesnickie.pl/search/label/Wydarzenia
+    kind: nowiny_olesnickie_wydarzenia
+    enabled: true
+
   - id: ebilet_wroclaw
     name: eBilet Wrocław
     url: https://www.ebilet.pl/miasto/wroclaw
     kind: ebilet_city
+    enabled: true
+
+  - id: ebilet_pl
+    name: eBilet — strona główna (Polska; dużo szumu)
+    url: https://www.ebilet.pl/
+    kind: ebilet_pl
     enabled: true
 
   - id: wroclawguide_calendar
