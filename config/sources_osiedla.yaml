@@ -1,13 +1,13 @@
-# Lokalne / osiedlowe źródła (ładowane razem z sources_phase1.yaml).
+# Lokalne / osiedlowe zrodla (laczone z sources_phase1.yaml).
 #
-# 1) wroclaw_go + ?miejsce=… — filtr miejsca na wroclaw.pl/go (najpewniej gdy w HTML jest JSON-LD).
-#    Nowe: w filtrach na stronie wydarzeń wybierz miejsce i skopiuj pełny URL z paska adresu.
-# 2) facebook_event_search — osobne zapytania na dzielnice (duplikaty FB i tak łączy fingerprint po ID wydarzenia).
-# 3) generic_links — strony Rad Osiedla / osiedle.wroc.pl (często bez daty; verify_ssl jak zajezdnia).
+# Cel: szeroki zasieg (wiecej sygnalu niz szumu na start); pozniej wylaczaj zrodla po `id`.
+# - wroclaw_go + ?miejsce= — kopiuj URL z filtra miejsca na wroclaw.pl/go
+# - facebook_event_search — duplikaty FB laczy fingerprint po ID wydarzenia
+# - generic_links — osiedle.wroc.pl (czesto bez daty); verify_ssl: false
 
 version: 1
 sources:
-  # --- wroclaw.pl/go — instytucje osiedlowe / lokalne MIK (sprawdzone: application/ld+json na liście) ---
+  # --- wroclaw.pl/go — miejsca z JSON-LD na liscie (sprawdzone) ---
   - id: go_miejsce_ck_nowy_pafawag
     name: wroclaw.pl/go (CK Nowy Pafawag)
     url: https://www.wroclaw.pl/go/wydarzenia?miejsce=22960-centrum-kultury-nowy-pafawag
@@ -39,12 +39,24 @@ sources:
     enabled: true
 
   - id: go_miejsce_czasoprzestrzen_dabie
-    name: wroclaw.pl/go (Czasoprzestrzeń — Zajezdnia Dąbie)
+    name: wroclaw.pl/go (Czasoprzestrzen — Zajezdnia Dąbie)
     url: https://www.wroclaw.pl/go/wydarzenia?miejsce=1259858-czasoprzestrzen
     kind: wroclaw_go
     enabled: true
 
-  # --- Facebook — wyszukiwanie z doprecyzowaniem dzielnicy ---
+  - id: go_miejsce_vertigo_jazz_club
+    name: wroclaw.pl/go (Vertigo Jazz Club)
+    url: https://www.wroclaw.pl/go/wydarzenia?miejsce=915-vertigo-jazz-club
+    kind: wroclaw_go
+    enabled: true
+
+  - id: go_miejsce_opera_wroclawska
+    name: wroclaw.pl/go (Opera Wrocławska)
+    url: https://www.wroclaw.pl/go/wydarzenia?miejsce=152-opera-wroclawska
+    kind: wroclaw_go
+    enabled: true
+
+  # --- Facebook — dzielnice i rejony (obok zapytan w phase1) ---
   - id: facebook_events_search_wroclaw_fabryczna
     name: Facebook — wydarzenia (Wrocław Fabryczna)
     url: https://www.facebook.com/events/search?q=Wroc%C5%82aw+Fabryczna
@@ -75,31 +87,327 @@ sources:
     kind: facebook_event_search
     enabled: true
 
-  # --- Rady osiedli (portal gminy) — certyfikat czasem problematyczny lokalnie ---
+  - id: facebook_events_search_wroclaw_olbin
+    name: Facebook — wydarzenia (Wrocław Ołbin)
+    url: https://www.facebook.com/events/search?q=Wroc%C5%82aw+O%C5%82bin
+    kind: facebook_event_search
+    enabled: true
+
+  - id: facebook_events_search_wroclaw_oltaszyn
+    name: Facebook — wydarzenia (Wrocław Ołtaszyn)
+    url: https://www.facebook.com/events/search?q=Wroc%C5%82aw+O%C5%82taszyn
+    kind: facebook_event_search
+    enabled: true
+
+  - id: facebook_events_search_wroclaw_biskupin
+    name: Facebook — wydarzenia (Wrocław Biskupin)
+    url: https://www.facebook.com/events/search?q=Wroc%C5%82aw+Biskupin
+    kind: facebook_event_search
+    enabled: true
+
+  - id: facebook_events_search_wroclaw_brochow
+    name: Facebook — wydarzenia (Wrocław Brochów)
+    url: https://www.facebook.com/events/search?q=Wroc%C5%82aw+Broch%C3%B3w
+    kind: facebook_event_search
+    enabled: true
+
+  - id: facebook_events_search_wroclaw_karlowice
+    name: Facebook — wydarzenia (Wrocław Karłowice)
+    url: https://www.facebook.com/events/search?q=Wroc%C5%82aw+Kar%C5%82owice
+    kind: facebook_event_search
+    enabled: true
+
+  - id: facebook_events_search_wroclaw_nadodrze
+    name: Facebook — wydarzenia (Wrocław Nadodrze)
+    url: https://www.facebook.com/events/search?q=Wroc%C5%82aw+Nadodrze
+    kind: facebook_event_search
+    enabled: true
+
+  - id: facebook_events_search_wroclaw_dabie
+    name: Facebook — wydarzenia (Wrocław Dąbie)
+    url: https://www.facebook.com/events/search?q=Wroc%C5%82aw+D%C4%85bie
+    kind: facebook_event_search
+    enabled: true
+
+  - id: facebook_events_search_wroclaw_kuzniki
+    name: Facebook — wydarzenia (Wrocław Kuźniki)
+    url: https://www.facebook.com/events/search?q=Wroc%C5%82aw+Ku%C5%BAniki
+    kind: facebook_event_search
+    enabled: true
+
+  - id: facebook_events_search_wroclaw_grabiszyn
+    name: Facebook — wydarzenia (Wrocław Grabiszyn)
+    url: https://www.facebook.com/events/search?q=Wroc%C5%82aw+Grabiszyn
+    kind: facebook_event_search
+    enabled: true
+
+  - id: facebook_events_search_wroclaw_lesnica
+    name: Facebook — wydarzenia (Wrocław Leśnica)
+    url: https://www.facebook.com/events/search?q=Wroc%C5%82aw+Le%C5%9Bnica
+    kind: facebook_event_search
+    enabled: true
+
+  - id: facebook_events_search_wroclaw_gajowice
+    name: Facebook — wydarzenia (Wrocław Gajowice)
+    url: https://www.facebook.com/events/search?q=Wroc%C5%82aw+Gajowice
+    kind: facebook_event_search
+    enabled: true
+
+  - id: facebook_events_search_wroclaw_muchobor
+    name: Facebook — wydarzenia (Wrocław Muchobór)
+    url: https://www.facebook.com/events/search?q=Wroc%C5%82aw+Muchob%C3%B3r
+    kind: facebook_event_search
+    enabled: true
+
+  # --- Wszystkie rady osiedli z menu osiedle.wroc.pl (duzo linkow) ---
   - id: osiedle_wroc_pl
-    name: Wrocławskie Osiedla — strona główna
+    name: osiedle.wroc.pl (home)
     url: https://osiedle.wroc.pl/
     kind: generic_links
     verify_ssl: false
     enabled: true
 
+  - id: osiedle_wroc_bienkowice
+    name: osiedle.wroc.pl / bienkowice
+    url: https://osiedle.wroc.pl/index.php/bienkowice
+    kind: generic_links
+    verify_ssl: false
+    enabled: true
+
+  - id: osiedle_wroc_biskupin
+    name: osiedle.wroc.pl / biskupin
+    url: https://osiedle.wroc.pl/index.php/biskupin
+    kind: generic_links
+    verify_ssl: false
+    enabled: true
+
+  - id: osiedle_wroc_borek
+    name: osiedle.wroc.pl / borek
+    url: https://osiedle.wroc.pl/index.php/borek
+    kind: generic_links
+    verify_ssl: false
+    enabled: true
+
+  - id: osiedle_wroc_brochow
+    name: osiedle.wroc.pl / brochow
+    url: https://osiedle.wroc.pl/index.php/brochow
+    kind: generic_links
+    verify_ssl: false
+    enabled: true
+
+  - id: osiedle_wroc_gadow_popowice
+    name: osiedle.wroc.pl / gadow-popowice
+    url: https://osiedle.wroc.pl/index.php/gadow-popowice
+    kind: generic_links
+    verify_ssl: false
+    enabled: true
+
+  - id: osiedle_wroc_gajowice
+    name: osiedle.wroc.pl / gajowice
+    url: https://osiedle.wroc.pl/index.php/gajowice
+    kind: generic_links
+    verify_ssl: false
+    enabled: true
+
+  - id: osiedle_wroc_grabiszyn_grabiszynek
+    name: osiedle.wroc.pl / grabiszyn-grabiszynek
+    url: https://osiedle.wroc.pl/index.php/grabiszyn-grabiszynek
+    kind: generic_links
+    verify_ssl: false
+    enabled: true
+
+  - id: osiedle_wroc_jagodno
+    name: osiedle.wroc.pl / jagodno
+    url: https://osiedle.wroc.pl/index.php/jagodno
+    kind: generic_links
+    verify_ssl: false
+    enabled: true
+
+  - id: osiedle_wroc_jerzmanowo
+    name: osiedle.wroc.pl / jerzmanowo
+    url: https://osiedle.wroc.pl/index.php/jerzmanowo
+    kind: generic_links
+    verify_ssl: false
+    enabled: true
+
+  - id: osiedle_wroc_karlowice_rozanka
+    name: osiedle.wroc.pl / karlowice-rozanka
+    url: https://osiedle.wroc.pl/index.php/karlowice-rozanka
+    kind: generic_links
+    verify_ssl: false
+    enabled: true
+
+  - id: osiedle_wroc_krzyki_partynice
+    name: osiedle.wroc.pl / krzyki-partynice
+    url: https://osiedle.wroc.pl/index.php/krzyki-partynice
+    kind: generic_links
+    verify_ssl: false
+    enabled: true
+
+  - id: osiedle_wroc_kuzniki
+    name: osiedle.wroc.pl / kuzniki
+    url: https://osiedle.wroc.pl/index.php/kuzniki
+    kind: generic_links
+    verify_ssl: false
+    enabled: true
+
+  - id: osiedle_wroc_lipa_piotrowska
+    name: osiedle.wroc.pl / lipa-piotrowska
+    url: https://osiedle.wroc.pl/index.php/lipa-piotrowska
+    kind: generic_links
+    verify_ssl: false
+    enabled: true
+
+  - id: osiedle_wroc_maslice
+    name: osiedle.wroc.pl / maslice
+    url: https://osiedle.wroc.pl/index.php/maslice
+    kind: generic_links
+    verify_ssl: false
+    enabled: true
+
+  - id: osiedle_wroc_muchobor_maly
+    name: osiedle.wroc.pl / muchobor-maly
+    url: https://osiedle.wroc.pl/index.php/muchobor-maly
+    kind: generic_links
+    verify_ssl: false
+    enabled: true
+
+  - id: osiedle_wroc_muchobor_wielki
+    name: osiedle.wroc.pl / muchobor-wielki
+    url: https://osiedle.wroc.pl/index.php/muchobor-wielki
+    kind: generic_links
+    verify_ssl: false
+    enabled: true
+
+  - id: osiedle_wroc_olbin
+    name: osiedle.wroc.pl / olbin
+    url: https://osiedle.wroc.pl/index.php/olbin
+    kind: generic_links
+    verify_ssl: false
+    enabled: true
+
+  - id: osiedle_wroc_oltaszyn
+    name: osiedle.wroc.pl / oltaszyn
+    url: https://osiedle.wroc.pl/index.php/oltaszyn
+    kind: generic_links
+    verify_ssl: false
+    enabled: true
+
+  - id: osiedle_wroc_osobowice_redzin
+    name: osiedle.wroc.pl / osobowice-redzin
+    url: https://osiedle.wroc.pl/index.php/osobowice-redzin
+    kind: generic_links
+    verify_ssl: false
+    enabled: true
+
+  - id: osiedle_wroc_pawlowice
+    name: osiedle.wroc.pl / pawlowice
+    url: https://osiedle.wroc.pl/index.php/pawlowice
+    kind: generic_links
+    verify_ssl: false
+    enabled: true
+
+  - id: osiedle_wroc_plac_grunwaldzki
+    name: osiedle.wroc.pl / plac-grunwaldzki
+    url: https://osiedle.wroc.pl/index.php/plac-grunwaldzki
+    kind: generic_links
+    verify_ssl: false
+    enabled: true
+
+  - id: osiedle_wroc_polanowice_poswietne_ligota
+    name: osiedle.wroc.pl / polanowice-poswietne-ligota
+    url: https://osiedle.wroc.pl/index.php/polanowice-poswietne-ligota
+    kind: generic_links
+    verify_ssl: false
+    enabled: true
+
+  - id: osiedle_wroc_powstancow_slaskich
+    name: osiedle.wroc.pl / powstancow-slaskich
+    url: https://osiedle.wroc.pl/index.php/powstancow-slaskich
+    kind: generic_links
+    verify_ssl: false
+    enabled: true
+
+  - id: osiedle_wroc_pracze_odrzanskie
+    name: osiedle.wroc.pl / pracze-odrzanskie
+    url: https://osiedle.wroc.pl/index.php/pracze-odrzanskie
+    kind: generic_links
+    verify_ssl: false
+    enabled: true
+
   - id: osiedle_wroc_przedmiescie_olawskie
-    name: Rada Osiedla Przedmieście Oławskie (osiedle.wroc.pl)
+    name: osiedle.wroc.pl / przedmiescie-olawskie
     url: https://osiedle.wroc.pl/index.php/przedmiescie-olawskie
     kind: generic_links
     verify_ssl: false
     enabled: true
 
-  - id: osiedle_wroc_zawidawie
-    name: Rada Osiedla Zawidawie (osiedle.wroc.pl)
-    url: https://osiedle.wroc.pl/index.php/zawidawie
+  - id: osiedle_wroc_przedmiescie_swidnickie
+    name: osiedle.wroc.pl / przedmiescie-swidnickie
+    url: https://osiedle.wroc.pl/index.php/przedmiescie-swidnickie
+    kind: generic_links
+    verify_ssl: false
+    enabled: true
+
+  - id: osiedle_wroc_soltysowice
+    name: osiedle.wroc.pl / soltysowice
+    url: https://osiedle.wroc.pl/index.php/soltysowice
+    kind: generic_links
+    verify_ssl: false
+    enabled: true
+
+  - id: osiedle_wroc_stare_miasto
+    name: osiedle.wroc.pl / stare-miasto
+    url: https://osiedle.wroc.pl/index.php/stare-miasto
+    kind: generic_links
+    verify_ssl: false
+    enabled: true
+
+  - id: osiedle_wroc_szczepin
+    name: osiedle.wroc.pl / szczepin
+    url: https://osiedle.wroc.pl/index.php/szczepin
     kind: generic_links
     verify_ssl: false
     enabled: true
 
   - id: osiedle_wroc_tarnogaj
-    name: Rada Osiedla Tarnogaj (osiedle.wroc.pl)
+    name: osiedle.wroc.pl / tarnogaj
     url: https://osiedle.wroc.pl/index.php/tarnogaj
+    kind: generic_links
+    verify_ssl: false
+    enabled: true
+
+  - id: osiedle_wroc_widawa
+    name: osiedle.wroc.pl / widawa
+    url: https://osiedle.wroc.pl/index.php/widawa
+    kind: generic_links
+    verify_ssl: false
+    enabled: true
+
+  - id: osiedle_wroc_wojszyce
+    name: osiedle.wroc.pl / wojszyce
+    url: https://osiedle.wroc.pl/index.php/wojszyce
+    kind: generic_links
+    verify_ssl: false
+    enabled: true
+
+  - id: osiedle_wroc_zacisze_zalesie_szczytniki
+    name: osiedle.wroc.pl / zacisze-zalesie-szczytniki
+    url: https://osiedle.wroc.pl/index.php/zacisze-zalesie-szczytniki
+    kind: generic_links
+    verify_ssl: false
+    enabled: true
+
+  - id: osiedle_wroc_zawidawie
+    name: osiedle.wroc.pl / zawidawie
+    url: https://osiedle.wroc.pl/index.php/zawidawie
+    kind: generic_links
+    verify_ssl: false
+    enabled: true
+
+  - id: osiedle_wroc_zerniki
+    name: osiedle.wroc.pl / zerniki
+    url: https://osiedle.wroc.pl/index.php/zerniki
     kind: generic_links
     verify_ssl: false
     enabled: true
