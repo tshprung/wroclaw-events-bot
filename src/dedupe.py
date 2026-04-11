@@ -1,13 +1,10 @@
 from __future__ import annotations
 
-import os
 import re
 from collections import defaultdict
 from dataclasses import replace
 from datetime import date, datetime, time as dt_time, timezone, tzinfo
 from urllib.parse import unquote, urlparse
-
-from dateutil import tz as dttz
 
 from rapidfuzz.fuzz import token_set_ratio
 
@@ -20,12 +17,6 @@ _MEETUP_EVENT_ID_IN_URL = re.compile(r"meetup\.com/.*/events/(\d+)", re.I)
 _GO_PATH_EVENT_ID = re.compile(r"/go/wydarzenia/[^/]+/(\d+)-", re.I)
 _GO_PATH_TAIL = re.compile(r"/go/wydarzenia/([^/]+)/(\d+)-([^/]+)$", re.I)
 _RAW_DMY_FULL = re.compile(r"\b(\d{1,2})\.(\d{1,2})\.(\d{2,4})\b")
-
-
-def _fingerprint_local_tz() -> tzinfo:
-    name = os.environ.get("TIMEZONE", "Europe/Warsaw")
-    z = dttz.gettz(name)
-    return z if z is not None else timezone.utc
 
 
 def _norm(s: str) -> str:
@@ -59,26 +50,6 @@ def _parse_pl_date_from_raw(raw: str | None) -> date | None:
         return date(y, mon, dom)
     except ValueError:
         return None
-
-
-def _go_fingerprint_time_key(ev: Event) -> str:
-    """Local calendar date for start_at, else date parsed from raw_date_text, else undated.
-
-    JSON-LD rows have start_at; anchor-only rows often have raw_date_text only. Without this,
-    those become go:<id>:undated vs go:<id>:2026-04-11 and duplicate Telegram posts.
-    """
-    if ev.start_at:
-        t = ev.start_at
-        loc = _fingerprint_local_tz()
-        if t.tzinfo is None:
-            t = t.replace(tzinfo=loc)
-        else:
-            t = t.astimezone(loc)
-        return t.date().isoformat()
-    d = _parse_pl_date_from_raw(ev.raw_date_text)
-    if d:
-        return d.isoformat()
-    return "undated"
 
 
 def _normalized_go_detail_key(url: str) -> str | None:
@@ -219,8 +190,9 @@ def fingerprint(ev: Event) -> str:
         return f"meetup:{mmu.group(1)}"
     goid = _wroclaw_go_numeric_id(ev.url or "")
     if goid:
-        # Local date: same id + day is one row; recurring dates get new keys after prune.
-        return f"go:{goid}:{_go_fingerprint_time_key(ev)}"
+        # Numeric id only: date-based keys drift between runs (LD vs anchor, startDate tweaks),
+        # which caused hourly Telegram repeats. Rows are removed after start_at passes (prune).
+        return f"go:{goid}"
     title = _norm(ev.title)
     venue = _norm(ev.venue or "")
     start = ev.start_at.isoformat() if ev.start_at else ""
