@@ -12,6 +12,19 @@ sources:
     kind: wroclaw_go
     enabled: true
 
+  - id: wroclaw_go_rozrywka
+    name: wroclaw.pl/go rozrywka
+    url: https://www.wroclaw.pl/go/wydarzenia/rozrywka
+    kind: wroclaw_go
+    enabled: true
+
+  # Pojedyncza strona wydarzenia na go.wroclaw — gdy nie wyplywa z listy „wszystkie” w czasie.
+  - id: wroclaw_go_detail_festiwal_kolorow_holi_2026
+    name: wroclaw.pl/go — Festiwal Kolorów / Holi 2026 (strona wydarzenia)
+    url: https://www.wroclaw.pl/go/wydarzenia/rozrywka/1409046-festiwal-kolorow-wroclaw-holi-celebration-2026
+    kind: wroclaw_go
+    enabled: true
+
   - id: wroclaw_go_weekend
     name: wroclaw.pl/go weekend summaries
     url: https://www.wroclaw.pl/go/zestawienia
@@ -27,6 +40,12 @@ sources:
   - id: pik_wroclaw
     name: PIK Wrocław
     url: https://pik.wroclaw.pl/
+    kind: pik
+    enabled: true
+
+  - id: pik_holi_festival_wroclaw
+    name: PIK — Holi / Festiwal Kolorów (strona wydarzenia)
+    url: https://pik.wroclaw.pl/holi-festival-swieto-kolorow-we-wroclawiu/
     kind: pik
     enabled: true
 

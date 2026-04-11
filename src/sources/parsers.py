@@ -132,6 +132,13 @@ def _slug_title_from_go_url(url: str) -> str:
     return _clean(m.group(1).replace("-", " "))
 
 
+def _wroclaw_go_detail_id_from_source_url(listing_url: str) -> str | None:
+    """If `listing_url` is a single-event /go/wydarzenia/.../id-slug page, return numeric id."""
+    path = unquote(urlparse(listing_url).path or "")
+    m = re.search(r"/go/wydarzenia/[^/]+/(\d+)-", path, re.I)
+    return m.group(1) if m else None
+
+
 # Also appears inside HTML/JSON payloads as href="wydarzenia/<kategoria>/<id>-<slug>" (no /go prefix).
 # Slug may contain "+" (e.g. "dla-dzieci-6+") or other chars — do not restrict to [a-z0-9-].
 _WRO_RAW_REL_DETAIL = re.compile(
@@ -560,6 +567,30 @@ def parse_facebook_event_search(source: Source, html: str) -> list[Event]:
     return out
 
 
+_PIK_EMBEDDED_GO_DETAIL = re.compile(
+    r"https://(?:www\.)?wroclaw\.pl/go/wydarzenia/[a-z0-9_-]+/\d+-[^\"'\s<>#]+",
+    re.I,
+)
+
+
+def parse_pik(source: Source, html: str) -> list[Event]:
+    """PIK: generic nav links plus any wroclaw.pl/go event permalinks embedded in the HTML."""
+    out = parse_generic_links(source, html)
+    seen: set[str] = {e.url for e in out}
+    for m in _PIK_EMBEDDED_GO_DETAIL.finditer(html):
+        u = m.group(0).split("#")[0].rstrip("/.")
+        path = unquote(urlparse(u).path or "")
+        if not _GO_EVENT_PATH.search(path):
+            continue
+        if u in seen:
+            continue
+        seen.add(u)
+        slug_t = _slug_title_from_go_url(u)
+        title = _clean(slug_t) if slug_t else "Wydarzenie (wroclaw.pl/go)"
+        out.append(Event(source_id=source.id, title=title, start_at=None, venue=None, url=u))
+    return out
+
+
 def parse_generic_links(source: Source, html: str) -> list[Event]:
     # Generic fallback: create low-fidelity “events” from prominent links.
     # This is meant as scaffolding; source-specific parsers should replace it.
@@ -632,7 +663,11 @@ def parse_wroclaw_go(source: Source, html: str) -> list[Event]:
         ev = _parse_wroclaw_go_anchor(source.id, text, url)
         if ev.title:
             out.append(ev)
-    return _dedupe_prefer_real_go_url(out)
+    out = _dedupe_prefer_real_go_url(out)
+    detail_id = _wroclaw_go_detail_id_from_source_url(source.url)
+    if detail_id:
+        out = [e for e in out if f"/{detail_id}-" in (urlparse(e.url).path or "")]
+    return out
 
 
 # Start of the "when" chunk on wroclaw.pl/go listing anchors (often: Title WHEN ...optional venue...).
@@ -851,7 +886,7 @@ def parser_for_kind(kind: str) -> Callable[[Source, str], list[Event]]:
         "kino_nh": parse_kino_nh,
         # place-holders:
         "wydarzenia_wroclaw": parse_generic_links,
-        "pik": parse_generic_links,
+        "pik": parse_pik,
         "crossweb": parse_generic_links,
         "ebilet_city": parse_generic_links,
         "wroclaw_travel_calendar": parse_generic_links,
