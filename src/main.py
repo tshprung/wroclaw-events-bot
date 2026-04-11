@@ -13,8 +13,17 @@ from dotenv import dotenv_values, load_dotenv
 from dateutil import tz
 
 from .config import load_settings
-from .event_window import filter_events_in_window, load_window_options, resolve_when
-from .dedupe import collapse_wroclaw_go_twin_listings, fingerprint
+from .event_window import (
+    filter_events_in_window,
+    format_event_when_display,
+    load_window_options,
+    resolve_when,
+)
+from .dedupe import (
+    collapse_wroclaw_go_same_detail_url,
+    collapse_wroclaw_go_twin_listings,
+    fingerprint,
+)
 from .exclusions import filter_out_excluded_events
 from .health import should_admin_alert
 from .models import Event, Source
@@ -270,6 +279,7 @@ def main() -> int:
                 events, n_excl = filter_out_excluded_events(events)
                 if n_excl:
                     log.info("[%s] exclusions: dropped %d", src.id, n_excl)
+                events = collapse_wroclaw_go_same_detail_url(events, tzinfo)
                 if (
                     src.kind == "wroclaw_go"
                     and events_raw
@@ -303,7 +313,7 @@ def main() -> int:
                         new_for_source += 1
                         msg = format_event_message(
                             title=ev.title,
-                            when=ev.raw_date_text,
+                            when=format_event_when_display(ev, tzinfo),
                             venue=ev.venue,
                             url=ev.url,
                         )

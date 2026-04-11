@@ -4,7 +4,7 @@ import os
 import re
 import unicodedata
 from dataclasses import dataclass
-from datetime import date, datetime, time, timedelta
+from datetime import date, datetime, time, timedelta, tzinfo
 
 from .models import Event
 
@@ -199,6 +199,20 @@ def resolve_when(ev: Event, now: datetime) -> _Resolved | None:
         return r
     if ev.raw_date_text:
         return _parse_raw_when(ev.raw_date_text, now)
+    return None
+
+
+def format_event_when_display(ev: Event, local_tz: tzinfo) -> str | None:
+    """Human line for Telegram: prefer raw card text, else formatted local start_at."""
+    if ev.raw_date_text and ev.raw_date_text.strip():
+        return ev.raw_date_text.strip()
+    if ev.start_at:
+        t = ev.start_at
+        if t.tzinfo is None:
+            t = t.replace(tzinfo=local_tz)
+        else:
+            t = t.astimezone(local_tz)
+        return t.strftime("%d.%m.%Y %H:%M")
     return None
 
 

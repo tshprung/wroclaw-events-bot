@@ -3,7 +3,8 @@ from __future__ import annotations
 import os
 import re
 from collections import defaultdict
-from datetime import date, datetime, timezone, tzinfo
+from dataclasses import replace
+from datetime import date, datetime, time as dt_time, timezone, tzinfo
 from urllib.parse import unquote, urlparse
 
 from dateutil import tz as dttz
@@ -18,6 +19,7 @@ _FB_EVENT_ID_IN_URL = re.compile(r"facebook\.com/events/(\d+)", re.I)
 _MEETUP_EVENT_ID_IN_URL = re.compile(r"meetup\.com/.*/events/(\d+)", re.I)
 _GO_PATH_EVENT_ID = re.compile(r"/go/wydarzenia/[^/]+/(\d+)-", re.I)
 _GO_PATH_TAIL = re.compile(r"/go/wydarzenia/([^/]+)/(\d+)-([^/]+)$", re.I)
+_RAW_DMY_FULL = re.compile(r"\b(\d{1,2})\.(\d{1,2})\.(\d{2,4})\b")
 
 
 def _fingerprint_local_tz() -> tzinfo:
@@ -43,21 +45,117 @@ def _wroclaw_go_numeric_id(url: str) -> str | None:
     return m.group(1) if m else None
 
 
-def _go_fingerprint_time_key(ev: Event) -> str:
-    """Local calendar date (TIMEZONE) so the same city listing dedupes across parsers/sources.
+def _parse_pl_date_from_raw(raw: str | None) -> date | None:
+    """First DD.MM[.RRRR] in anchor-style raw text (same family as wroclaw.pl/go cards)."""
+    if not raw or not raw.strip():
+        return None
+    m = _RAW_DMY_FULL.search(raw.strip())
+    if not m:
+        return None
+    dom, mon, y = int(m.group(1)), int(m.group(2)), int(m.group(3))
+    if y < 100:
+        y += 2000
+    try:
+        return date(y, mon, dom)
+    except ValueError:
+        return None
 
-    Minute-level UTC keys split one performance when startDate varies (midnight vs real hour,
-    JSON-LD vs anchor) or when the same id is scraped from several configured wroclaw_go URLs.
+
+def _go_fingerprint_time_key(ev: Event) -> str:
+    """Local calendar date for start_at, else date parsed from raw_date_text, else undated.
+
+    JSON-LD rows have start_at; anchor-only rows often have raw_date_text only. Without this,
+    those become go:<id>:undated vs go:<id>:2026-04-11 and duplicate Telegram posts.
     """
+    if ev.start_at:
+        t = ev.start_at
+        loc = _fingerprint_local_tz()
+        if t.tzinfo is None:
+            t = t.replace(tzinfo=loc)
+        else:
+            t = t.astimezone(loc)
+        return t.date().isoformat()
+    d = _parse_pl_date_from_raw(ev.raw_date_text)
+    if d:
+        return d.isoformat()
+    return "undated"
+
+
+def _normalized_go_detail_key(url: str) -> str | None:
+    """Stable key for one wroclaw.pl/go detail permalink (scheme-insensitive)."""
+    if not _wroclaw_go_numeric_id(url or ""):
+        return None
+    p = urlparse(url or "")
+    net = (p.netloc or "").lower()
+    if net.startswith("www."):
+        net = net[4:]
+    path = unquote((p.path or "").rstrip("/")).lower()
+    return f"{net}{path}"
+
+
+def _aware_local_start(ev: Event, local_tz: tzinfo) -> datetime | None:
     if not ev.start_at:
-        return "undated"
+        return None
     t = ev.start_at
-    loc = _fingerprint_local_tz()
     if t.tzinfo is None:
-        t = t.replace(tzinfo=loc)
+        t = t.replace(tzinfo=local_tz)
     else:
-        t = t.astimezone(loc)
-    return t.date().isoformat()
+        t = t.astimezone(local_tz)
+    return t
+
+
+def _merge_sort_key(ev: Event, local_tz: tzinfo) -> tuple[date, int, datetime]:
+    """Earlier calendar day wins; same day prefers rows with real start_at over raw-only."""
+    st = _aware_local_start(ev, local_tz)
+    if st:
+        return (st.date(), 0, st)
+    d = _parse_pl_date_from_raw(ev.raw_date_text)
+    if d:
+        noon = datetime.combine(d, dt_time(12, 0), tzinfo=local_tz)
+        return (d, 1, noon)
+    return (date.max, 2, datetime.max.replace(tzinfo=local_tz))
+
+
+def _merge_go_duplicate_group(members: list[Event], local_tz: tzinfo) -> Event:
+    best = min(members, key=lambda e: _merge_sort_key(e, local_tz))
+    for e in members:
+        if e is best:
+            continue
+        kw: dict = {}
+        if best.raw_date_text is None and e.raw_date_text:
+            kw["raw_date_text"] = e.raw_date_text
+        if best.venue is None and e.venue:
+            kw["venue"] = e.venue
+        if best.start_at is None and e.start_at is not None:
+            kw["start_at"] = e.start_at
+        if kw:
+            best = replace(best, **kw)
+    return best
+
+
+def collapse_wroclaw_go_same_detail_url(events: list[Event], local_tz: tzinfo) -> list[Event]:
+    """One row per go.wroclaw detail URL per batch (multiple JSON-LD Event blocks, LD + anchor, etc.)."""
+    groups: dict[str, list[Event]] = defaultdict(list)
+    for e in events:
+        k = _normalized_go_detail_key(e.url)
+        if k is None:
+            continue
+        groups[k].append(e)
+    merged: dict[str, Event] = {k: _merge_go_duplicate_group(v, local_tz) for k, v in groups.items() if len(v) > 1}
+    if not merged:
+        return events
+    emitted: set[str] = set()
+    out: list[Event] = []
+    for e in events:
+        k = _normalized_go_detail_key(e.url)
+        if k is None:
+            out.append(e)
+            continue
+        if k in emitted:
+            continue
+        emitted.add(k)
+        out.append(merged.get(k, e))
+    return out
 
 
 def _wroclaw_go_path_tail(url: str) -> tuple[str | None, str | None, str | None]:
