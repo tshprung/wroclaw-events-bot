@@ -14,7 +14,7 @@ from dateutil import tz
 
 from .config import load_settings
 from .event_window import filter_events_in_window, load_window_options, resolve_when
-from .dedupe import fingerprint
+from .dedupe import collapse_wroclaw_go_twin_listings, fingerprint
 from .exclusions import filter_out_excluded_events
 from .health import should_admin_alert
 from .models import Event, Source
@@ -235,6 +235,7 @@ def main() -> int:
                     if failed_first:
                         continue
                     events_raw = _dedupe_events_by_url(events_raw)
+                    events_raw = collapse_wroclaw_go_twin_listings(events_raw, tzinfo)
                 else:
                     if src.kind == "facebook_event_search":
                         res = fetch_facebook_event_search(session, src.url, verify=src.verify_ssl)
