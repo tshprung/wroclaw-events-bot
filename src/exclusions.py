@@ -39,6 +39,10 @@ _DEFAULT_URL_PARTS: frozenset[str] = frozenset(
         "kinonh.pl/bilet.s",
         # WTL: permanent show pages under /pl/spektakle/…, not dated performances.
         "teatrlalek.wroclaw.pl/pl/spektakle/",
+        # eBilet category hub (list of concerts), not one event.
+        "ebilet.pl/klasyka/koncert",
+        # wroclaw.pl/go listing anchors — same calendar row, not a permalink.
+        "#evt-",
     }
 )
 

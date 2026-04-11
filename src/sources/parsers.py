@@ -290,9 +290,14 @@ def _anchor_card_title(anchor_text: str) -> str:
 
 
 def _go_synthetic_detail_url(listing_base: str, name: str, st: datetime) -> str:
-    """Static HTML often lacks permalinks; fragment keeps URL unique for dedupe and messages."""
+    """Legacy: listing-page #evt- fragments (no longer emitted; kept for tests / callers)."""
     q = quote(f"{name}|{st.isoformat()}"[:220], safe="")
     return f"{listing_base.rstrip('/')}#evt-{q}"
+
+
+def _wroclaw_go_listing_fragment_url(url: str) -> bool:
+    """True if URL is a wroclaw.pl/go calendar hash, not /wydarzenia/.../id-slug."""
+    return "#evt-" in (url or "")
 
 
 def _normalize_title_for_slug_fuzz(title: str) -> str:
@@ -380,6 +385,8 @@ def _generic_link_keeps(text: str, url: str) -> bool:
     netloc = (urlparse(url).netloc or "").lower()
     raw_path = urlparse(url).path or ""
     path = raw_path.lower()
+    if "ebilet.pl" in netloc and "/klasyka/koncert" in path:
+        return False
     if "google." in netloc and "search" in path:
         return False
     if "encyklopedia" in path or "resetujpass" in path:
@@ -584,6 +591,8 @@ def parse_wroclaw_go(source: Source, html: str) -> list[Event]:
     by_u: dict[str, tuple[str, str]] = {}
     for t, u in links:
         u = (u or "").strip().rstrip("/")
+        if _wroclaw_go_listing_fragment_url(u):
+            continue
         if not u or not _GO_EVENT_PATH.search(u) or not (t or _slug_title_from_go_url(u)):
             continue
         by_u[u] = (t, u)
@@ -595,13 +604,16 @@ def parse_wroclaw_go(source: Source, html: str) -> list[Event]:
     out: list[Event] = []
     for name, st, ven, ld_fb in rows:
         hit = _best_url_for_ld_name(name, cand, used_urls)
+        if hit and _wroclaw_go_listing_fragment_url(hit):
+            hit = None
         if hit:
             used_urls.add(hit)
             url = hit
-        elif ld_fb:
+        elif ld_fb and not _wroclaw_go_listing_fragment_url(ld_fb):
             url = ld_fb
         else:
-            url = _go_synthetic_detail_url(source.url, name, st)
+            # No real permalink — skip (avoid posting wszystkie#evt-… listing anchors).
+            continue
         out.append(
             Event(
                 source_id=source.id,
@@ -614,6 +626,8 @@ def parse_wroclaw_go(source: Source, html: str) -> list[Event]:
         )
     for text, url in cand:
         if url in used_urls:
+            continue
+        if _wroclaw_go_listing_fragment_url(url):
             continue
         ev = _parse_wroclaw_go_anchor(source.id, text, url)
         if ev.title:
