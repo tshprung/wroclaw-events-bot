@@ -83,6 +83,34 @@ def _load_sources(path: str) -> list[Source]:
     return sources
 
 
+def _source_config_paths() -> list[pathlib.Path]:
+    override = os.environ.get("SOURCES_CONFIG_PATHS", "").strip()
+    if override:
+        return [pathlib.Path(p.strip()) for p in override.split(os.pathsep) if p.strip()]
+    return [
+        pathlib.Path("./config/sources_phase1.yaml"),
+        pathlib.Path("./config/sources_osiedla.yaml"),
+    ]
+
+
+def _load_all_sources() -> list[Source]:
+    """Merge YAML source lists; duplicate `id` values keep the first file’s definition."""
+    merged: list[Source] = []
+    seen: set[str] = set()
+    for path in _source_config_paths():
+        if not path.is_file():
+            if path.name == "sources_osiedla.yaml":
+                continue
+            raise RuntimeError(f"Missing sources config: {path}")
+        for s in _load_sources(str(path)):
+            if s.id in seen:
+                log.warning("Duplicate source id %r in %s — skipped", s.id, path)
+                continue
+            seen.add(s.id)
+            merged.append(s)
+    return merged
+
+
 def _short(s: str, n: int = 140) -> str:
     s = (s or "").strip()
     return s if len(s) <= n else s[: n - 1] + "…"
@@ -137,7 +165,7 @@ def main() -> int:
     run_id = str(uuid.uuid4())
     log.info("Run %s starting at %s", run_id, now_local.isoformat())
 
-    sources = [s for s in _load_sources("./config/sources_phase1.yaml") if s.enabled]
+    sources = [s for s in _load_all_sources() if s.enabled]
     session = requests.Session()
     conn = connect(settings.db_path)
 

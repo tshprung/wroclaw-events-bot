@@ -1,0 +1,105 @@
+# Lokalne / osiedlowe źródła (ładowane razem z sources_phase1.yaml).
+#
+# 1) wroclaw_go + ?miejsce=… — filtr miejsca na wroclaw.pl/go (najpewniej gdy w HTML jest JSON-LD).
+#    Nowe: w filtrach na stronie wydarzeń wybierz miejsce i skopiuj pełny URL z paska adresu.
+# 2) facebook_event_search — osobne zapytania na dzielnice (duplikaty FB i tak łączy fingerprint po ID wydarzenia).
+# 3) generic_links — strony Rad Osiedla / osiedle.wroc.pl (często bez daty; verify_ssl jak zajezdnia).
+
+version: 1
+sources:
+  # --- wroclaw.pl/go — instytucje osiedlowe / lokalne MIK (sprawdzone: application/ld+json na liście) ---
+  - id: go_miejsce_ck_nowy_pafawag
+    name: wroclaw.pl/go (CK Nowy Pafawag)
+    url: https://www.wroclaw.pl/go/wydarzenia?miejsce=22960-centrum-kultury-nowy-pafawag
+    kind: wroclaw_go
+    enabled: true
+
+  - id: go_miejsce_klub_firlej
+    name: wroclaw.pl/go (Klub Firlej)
+    url: https://www.wroclaw.pl/go/wydarzenia?miejsce=809-klub-firlej-osrodek-dzialan-artystycznych
+    kind: wroclaw_go
+    enabled: true
+
+  - id: go_miejsce_mdk_kopernika
+    name: wroclaw.pl/go (MDK im. Kopernika)
+    url: https://www.wroclaw.pl/go/wydarzenia?miejsce=1384064-mlodziezowy-dom-kultury-im-mikolaja-kopernika
+    kind: wroclaw_go
+    enabled: true
+
+  - id: go_miejsce_ck_agora
+    name: wroclaw.pl/go (CK Agora)
+    url: https://www.wroclaw.pl/go/wydarzenia?miejsce=855-centrum-kultury-agora-we-wroclawiu
+    kind: wroclaw_go
+    enabled: true
+
+  - id: go_miejsce_centrum_historii_zajezdnia
+    name: wroclaw.pl/go (Centrum Historii Zajezdnia)
+    url: https://www.wroclaw.pl/go/wydarzenia?miejsce=29980-centrum-historii-zajezdnia
+    kind: wroclaw_go
+    enabled: true
+
+  - id: go_miejsce_czasoprzestrzen_dabie
+    name: wroclaw.pl/go (Czasoprzestrzeń — Zajezdnia Dąbie)
+    url: https://www.wroclaw.pl/go/wydarzenia?miejsce=1259858-czasoprzestrzen
+    kind: wroclaw_go
+    enabled: true
+
+  # --- Facebook — wyszukiwanie z doprecyzowaniem dzielnicy ---
+  - id: facebook_events_search_wroclaw_fabryczna
+    name: Facebook — wydarzenia (Wrocław Fabryczna)
+    url: https://www.facebook.com/events/search?q=Wroc%C5%82aw+Fabryczna
+    kind: facebook_event_search
+    enabled: true
+
+  - id: facebook_events_search_wroclaw_krzyki
+    name: Facebook — wydarzenia (Wrocław Krzyki)
+    url: https://www.facebook.com/events/search?q=Wroc%C5%82aw+Krzyki
+    kind: facebook_event_search
+    enabled: true
+
+  - id: facebook_events_search_wroclaw_psie_pole
+    name: Facebook — wydarzenia (Wrocław Psie Pole)
+    url: https://www.facebook.com/events/search?q=Wroc%C5%82aw+Psie+Pole
+    kind: facebook_event_search
+    enabled: true
+
+  - id: facebook_events_search_wroclaw_stare_miasto
+    name: Facebook — wydarzenia (Wrocław Stare Miasto)
+    url: https://www.facebook.com/events/search?q=Wroc%C5%82aw+Stare+Miasto
+    kind: facebook_event_search
+    enabled: true
+
+  - id: facebook_events_search_wroclaw_srodmiescie
+    name: Facebook — wydarzenia (Wrocław Śródmieście)
+    url: https://www.facebook.com/events/search?q=Wroc%C5%82aw+%C5%9Ar%C3%B3dmie%C5%9Bcie
+    kind: facebook_event_search
+    enabled: true
+
+  # --- Rady osiedli (portal gminy) — certyfikat czasem problematyczny lokalnie ---
+  - id: osiedle_wroc_pl
+    name: Wrocławskie Osiedla — strona główna
+    url: https://osiedle.wroc.pl/
+    kind: generic_links
+    verify_ssl: false
+    enabled: true
+
+  - id: osiedle_wroc_przedmiescie_olawskie
+    name: Rada Osiedla Przedmieście Oławskie (osiedle.wroc.pl)
+    url: https://osiedle.wroc.pl/index.php/przedmiescie-olawskie
+    kind: generic_links
+    verify_ssl: false
+    enabled: true
+
+  - id: osiedle_wroc_zawidawie
+    name: Rada Osiedla Zawidawie (osiedle.wroc.pl)
+    url: https://osiedle.wroc.pl/index.php/zawidawie
+    kind: generic_links
+    verify_ssl: false
+    enabled: true
+
+  - id: osiedle_wroc_tarnogaj
+    name: Rada Osiedla Tarnogaj (osiedle.wroc.pl)
+    url: https://osiedle.wroc.pl/index.php/tarnogaj
+    kind: generic_links
+    verify_ssl: false
+    enabled: true
