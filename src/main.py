@@ -199,7 +199,7 @@ def main() -> int:
                 http_for_health: int = 200
 
                 if src.kind == "wroclaw_go":
-                    max_pages = max(1, min(30, int(os.environ.get("WROCLAW_GO_MAX_PAGES", "12"))))
+                    max_pages = max(1, min(30, int(os.environ.get("WROCLAW_GO_MAX_PAGES", "20"))))
                     failed_first = False
                     for page in range(1, max_pages + 1):
                         page_url = _wroclaw_go_page_url(src.url, page)

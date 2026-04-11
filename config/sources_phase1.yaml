@@ -6,6 +6,12 @@ sources:
     kind: wroclaw_go
     enabled: true
 
+  - id: wroclaw_go_sport_rekreacja
+    name: wroclaw.pl/go sport i rekreacja
+    url: https://www.wroclaw.pl/go/wydarzenia/sport-i-rekreacja
+    kind: wroclaw_go
+    enabled: true
+
   - id: wroclaw_go_weekend
     name: wroclaw.pl/go weekend summaries
     url: https://www.wroclaw.pl/go/zestawienia

@@ -396,6 +396,9 @@ def _generic_link_keeps(text: str, url: str) -> bool:
         return False
     if len(t) <= 2 and not _EVENT_PATH_HINTS.search(path):
         return False
+    if "osiedle.wroc.pl" in netloc.replace("www.", ""):
+        if not _osiedle_wroc_pl_link_keeps(raw_path, t):
+            return False
     return _likely_event_like_url(url)
 
 
@@ -417,6 +420,69 @@ def _likely_event_like_url(url: str) -> bool:
     if len(segs) == 1 and len(segs[0]) >= 36:
         return True
     return False
+
+
+# osiedle.wroc.pl — only Joomla articles with a numeric id; drop district index pages and admin/news noise.
+_OSIEDLE_ARTICLE = re.compile(r"/index\.php/(?:[^/]+/)?\d{3,}-", re.I)
+_OSIEDLE_PATH_NOISE = (
+    "fundusz",
+    "dofinansowanie",
+    "senioralny",
+    "ksef",
+    "samorzad",
+    "kontakt",
+    "dokumenty",
+    "galeria",
+    "deklaracja",
+    "zarzad-osiedla",
+    "rada-osiedla",
+    "statut",
+    "dyzury",
+    "wazne-kontakty",
+    "informator-osiedlowy",
+    "-komisji-",
+    "-komisja-",
+    "konsultacji-spolecznych",
+    "wcrs-",
+    "obsluga-wsparcie",
+    "komunikaty",
+    "planu-ogolnego-miasta",
+    "planu-ogoln",
+)
+_OSIEDLE_TITLE_FOLD_NOISE = (
+    "fundusz",
+    "dofinansowanie",
+    "ksef",
+    "deklaracja dostepnosci",
+    "zarzad osiedla",
+    "rada osiedla",
+    "statut",
+    "dyzury",
+    "galeria",
+    "dokumenty",
+    "kontakt",
+    "wazne kontakty",
+    "informator osiedlowy",
+    "zebranie komisji",
+    "konsultacji spolecznych",
+    "obsluga osiedli",
+)
+
+
+def _osiedle_wroc_pl_link_keeps(path: str, title: str) -> bool:
+    pl = (path or "").lower()
+    if not _OSIEDLE_ARTICLE.search(path or ""):
+        return False
+    for frag in _OSIEDLE_PATH_NOISE:
+        if frag in pl:
+            return False
+    folded = _fold_match(title or "")
+    if folded.strip(" .…") == "wiecej":
+        return False
+    for frag in _OSIEDLE_TITLE_FOLD_NOISE:
+        if frag in folded:
+            return False
+    return True
 
 
 def _canonical_facebook_event_url(url: str) -> str | None:
