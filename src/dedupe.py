@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import re
+import unicodedata
 from collections import defaultdict
 from dataclasses import replace
 from datetime import date, datetime, time as dt_time, timezone, tzinfo
 from urllib.parse import unquote, urlparse
 
-from rapidfuzz.fuzz import token_set_ratio
+from rapidfuzz.fuzz import partial_ratio, token_set_ratio
 
 from .models import Event
 
@@ -17,12 +18,77 @@ _MEETUP_EVENT_ID_IN_URL = re.compile(r"meetup\.com/.*/events/(\d+)", re.I)
 _GO_PATH_EVENT_ID = re.compile(r"/go/wydarzenia/[^/]+/(\d+)-", re.I)
 _GO_PATH_TAIL = re.compile(r"/go/wydarzenia/([^/]+)/(\d+)-([^/]+)$", re.I)
 _RAW_DMY_FULL = re.compile(r"\b(\d{1,2})\.(\d{1,2})\.(\d{2,4})\b")
+# Krajownik card titles: "12 Kwietnia 2026 , od 16:00 …"
+_PL_DMY_IN_TITLE = re.compile(
+    r"\b(\d{1,2})\s+([a-zA-ZąćęłńóśźżĄĆĘŁŃÓŚŹŻ]+)\s+(\d{4})\b",
+    re.UNICODE,
+)
+
+
+def _fold_month_token(s: str) -> str:
+    s = unicodedata.normalize("NFKD", (s or "").casefold())
+    return "".join(c for c in s if not unicodedata.combining(c))
+
+
+_PL_MONTH_BY_NAME: dict[str, int] = {
+    "stycznia": 1,
+    "lutego": 2,
+    "marca": 3,
+    "kwietnia": 4,
+    "maja": 5,
+    "czerwca": 6,
+    "lipca": 7,
+    "sierpnia": 8,
+    "wrzesnia": 9,
+    "wrzesnia": 9,
+    "pazdziernika": 10,
+    "listopada": 11,
+    "grudnia": 12,
+}
+
+
+def _pl_date_from_krajownik_title(title: str) -> date | None:
+    m = _PL_DMY_IN_TITLE.search(title or "")
+    if not m:
+        return None
+    dom, monw, y = int(m.group(1)), _fold_month_token(m.group(2)), int(m.group(3))
+    mon = _PL_MONTH_BY_NAME.get(monw)
+    if not mon:
+        return None
+    try:
+        return date(y, mon, dom)
+    except ValueError:
+        return None
 
 
 def _norm(s: str) -> str:
     s = (s or "").strip().lower()
     s = _SPACE_RE.sub(" ", s)
     return s
+
+
+def _is_krajownik_wroclaw_event_detail(url: str) -> bool:
+    p = urlparse(url or "")
+    net = (p.netloc or "").lower()
+    if "krajownik.pl" not in net:
+        return False
+    parts = [x for x in (p.path or "").split("/") if x]
+    if len(parts) < 3:
+        return False
+    return parts[0].lower() == "wroclaw" and parts[1].lower() == "wydarzenia"
+
+
+def _krajownik_slug_stem(url: str) -> str | None:
+    """Normalize krajownik detail slug so duplicate listings (different numeric ids) share a key."""
+    if not _is_krajownik_wroclaw_event_detail(url):
+        return None
+    parts = [x for x in (urlparse(url).path or "").split("/") if x]
+    leaf = unquote(parts[-1]).strip().lower()
+    if not leaf or not re.search(r"-\d+$", leaf):
+        return None
+    stem = re.sub(r"-\d+$", "", leaf)
+    stem = re.sub(r"^wroclaw-", "", stem, flags=re.I)
+    return stem or None
 
 
 def _wroclaw_go_numeric_id(url: str) -> str | None:
@@ -73,6 +139,25 @@ def _aware_local_start(ev: Event, local_tz: tzinfo) -> datetime | None:
     else:
         t = t.astimezone(local_tz)
     return t
+
+
+def _dedupe_tz() -> tzinfo:
+    import os
+
+    from dateutil import tz as dttz
+
+    z = dttz.gettz(os.environ.get("TIMEZONE", "Europe/Warsaw"))
+    return z if z is not None else timezone.utc
+
+
+def _event_local_date(ev: Event, local_tz: tzinfo) -> date | None:
+    st = _aware_local_start(ev, local_tz)
+    if st:
+        return st.date()
+    d = _parse_pl_date_from_raw(ev.raw_date_text)
+    if d:
+        return d
+    return _pl_date_from_krajownik_title(ev.title or "")
 
 
 def _merge_sort_key(ev: Event, local_tz: tzinfo) -> tuple[date, int, datetime]:
@@ -179,6 +264,47 @@ def collapse_wroclaw_go_twin_listings(events: list[Event], local_tz: tzinfo) -> 
     return [e for i, e in enumerate(events) if i not in drop_idx]
 
 
+def is_same_show_cross_source(a: Event, b: Event) -> bool:
+    """Looser than is_probably_same: krajownik long titles vs wroclaw.pl/go short titles, same day."""
+    ta, tb = _norm(a.title), _norm(b.title)
+    if min(len(ta), len(tb)) < 14:
+        return False
+    tsr = token_set_ratio(ta, tb)
+    par = partial_ratio(ta, tb)
+    if tsr < 68 and par < 72:
+        return False
+    va, vb = _norm(a.venue or ""), _norm(b.venue or "")
+    if va and vb:
+        if token_set_ratio(va, vb) < 65:
+            return False
+    else:
+        sole = va or vb
+        if sole:
+            long_t, short_t = (ta, tb) if len(ta) >= len(tb) else (tb, ta)
+            if not (
+                sole in long_t
+                or sole in short_t
+                or token_set_ratio(sole, long_t) >= 58
+                or token_set_ratio(sole, short_t) >= 58
+            ):
+                return False
+    return True
+
+
+def should_skip_cross_source_duplicate(ev: Event, seen: list[Event], local_tz: tzinfo) -> bool:
+    """Skip when an event already ingested this run matches the same show (other site / URL)."""
+    d_ev = _event_local_date(ev, local_tz)
+    if d_ev is None:
+        return False
+    for r in seen:
+        d_r = _event_local_date(r, local_tz)
+        if d_r is None or d_ev != d_r:
+            continue
+        if is_same_show_cross_source(ev, r) or is_same_show_cross_source(r, ev):
+            return True
+    return False
+
+
 def fingerprint(ev: Event) -> str:
     # One row per Facebook event permalink; anchor text on search pages is unstable.
     mfb = _FB_EVENT_ID_IN_URL.search(ev.url or "")
@@ -188,6 +314,10 @@ def fingerprint(ev: Event) -> str:
     mmu = _MEETUP_EVENT_ID_IN_URL.search(ev.url or "")
     if mmu:
         return f"meetup:{mmu.group(1)}"
+    stem = _krajownik_slug_stem(ev.url or "")
+    if stem:
+        d = _event_local_date(ev, _dedupe_tz())
+        return f"kraj:{stem}:{d.isoformat() if d else 'undated'}"
     goid = _wroclaw_go_numeric_id(ev.url or "")
     if goid:
         # Numeric id only: date-based keys drift between runs (LD vs anchor, startDate tweaks),

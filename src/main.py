@@ -23,6 +23,7 @@ from .dedupe import (
     collapse_wroclaw_go_same_detail_url,
     collapse_wroclaw_go_twin_listings,
     fingerprint,
+    should_skip_cross_source_duplicate,
 )
 from .exclusions import filter_out_excluded_events
 from .health import should_admin_alert
@@ -202,6 +203,7 @@ def main() -> int:
     )
 
     try:
+        cross_run_seen: list[Event] = []
         for src in sources:
             try:
                 parser = parser_for_kind(src.kind)
@@ -307,8 +309,11 @@ def main() -> int:
 
                 new_for_source = 0
                 for ev in events:
+                    if should_skip_cross_source_duplicate(ev, cross_run_seen, tzinfo):
+                        continue
                     fp = fingerprint(ev)
                     if insert_event_if_new(conn, fp, ev):
+                        cross_run_seen.append(ev)
                         new_events += 1
                         new_for_source += 1
                         msg = format_event_message(
