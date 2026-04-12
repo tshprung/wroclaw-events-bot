@@ -41,6 +41,8 @@ _DEFAULT_URL_PARTS: frozenset[str] = frozenset(
         "teatrlalek.wroclaw.pl/pl/spektakle/",
         # eBilet category hub (list of concerts), not one event.
         "ebilet.pl/klasyka/koncert",
+        # wydarzenia.wroclaw.pl editorial / topic hubs (not single events).
+        "wydarzenia.wroclaw.pl/blog/",
         # wroclaw.pl/go listing anchors — same calendar row, not a permalink.
         "#evt-",
     }

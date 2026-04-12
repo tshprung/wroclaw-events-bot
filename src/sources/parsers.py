@@ -413,6 +413,14 @@ def _generic_link_keeps(text: str, url: str) -> bool:
     if "osiedle.wroc.pl" in netloc.replace("www.", ""):
         if not _osiedle_wroc_pl_link_keeps(raw_path, t):
             return False
+    if "wydarzenia.wroclaw.pl" in netloc.replace("www.", ""):
+        # Category hubs (/koncerty/, /spektakle/) match _EVENT_PATH_HINTS via "koncert"/"spektakl"; blog is not events.
+        pln = path.replace("//", "/")
+        if "/blog/" in pln:
+            return False
+        segs = [s for s in raw_path.strip("/").split("/") if s]
+        if len(segs) < 2:
+            return False
     return _likely_event_like_url(url)
 
 
