@@ -78,6 +78,18 @@ def _is_krajownik_wroclaw_event_detail(url: str) -> bool:
     return parts[0].lower() == "wroclaw" and parts[1].lower() == "wydarzenia"
 
 
+def _wydarzenia_wroclaw_path_key(url: str) -> str | None:
+    """Stable key for wydarzenia.wroclaw.pl event pages (was title|…, caused repeats vs Krajownik)."""
+    p = urlparse(url or "")
+    net = (p.netloc or "").lower()
+    if "wydarzenia.wroclaw.pl" not in net:
+        return None
+    path = unquote((p.path or "").strip().rstrip("/")).lower()
+    if len(path) < 3:
+        return None
+    return path
+
+
 def _krajownik_slug_stem(url: str) -> str | None:
     """Normalize krajownik detail slug so duplicate listings (different numeric ids) share a key."""
     if not _is_krajownik_wroclaw_event_detail(url):
@@ -265,28 +277,39 @@ def collapse_wroclaw_go_twin_listings(events: list[Event], local_tz: tzinfo) -> 
 
 
 def is_same_show_cross_source(a: Event, b: Event) -> bool:
-    """Looser than is_probably_same: krajownik long titles vs wroclaw.pl/go short titles, same day."""
+    """Match krajownik long cards to short wydarzenia.wroclaw.pl / go.wroclaw titles, same calendar day."""
     ta, tb = _norm(a.title), _norm(b.title)
-    if min(len(ta), len(tb)) < 14:
+    if not ta or not tb:
+        return False
+    lo, sh = (ta, tb) if len(ta) >= len(tb) else (tb, ta)
+    if len(sh) < 8 or (len(lo) < 12 and len(sh) < 12):
         return False
     tsr = token_set_ratio(ta, tb)
-    par = partial_ratio(ta, tb)
-    if tsr < 68 and par < 72:
+    par_ls = partial_ratio(lo, sh)
+    par_sl = partial_ratio(sh, lo)
+    best_par = max(par_ls, par_sl)
+    # Allow shared rare tokens ("1991", show name) where token_set_ratio stays ~mid.
+    if tsr < 44 and best_par < 62:
+        return False
+    if tsr < 38 and best_par < 68:
         return False
     va, vb = _norm(a.venue or ""), _norm(b.venue or "")
     if va and vb:
-        if token_set_ratio(va, vb) < 65:
+        if token_set_ratio(va, vb) < 58:
             return False
     else:
         sole = va or vb
         if sole:
-            long_t, short_t = (ta, tb) if len(ta) >= len(tb) else (tb, ta)
             if not (
-                sole in long_t
-                or sole in short_t
-                or token_set_ratio(sole, long_t) >= 58
-                or token_set_ratio(sole, short_t) >= 58
+                sole in lo
+                or sole in sh
+                or token_set_ratio(sole, lo) >= 50
+                or token_set_ratio(sole, sh) >= 50
             ):
+                return False
+        else:
+            # No venue on either side (common for generic scrapers): need stronger title match.
+            if tsr < 44 and best_par < 68:
                 return False
     return True
 
@@ -294,14 +317,24 @@ def is_same_show_cross_source(a: Event, b: Event) -> bool:
 def should_skip_cross_source_duplicate(ev: Event, seen: list[Event], local_tz: tzinfo) -> bool:
     """Skip when an event already ingested this run matches the same show (other site / URL)."""
     d_ev = _event_local_date(ev, local_tz)
-    if d_ev is None:
-        return False
     for r in seen:
         d_r = _event_local_date(r, local_tz)
-        if d_r is None or d_ev != d_r:
+        if d_ev is not None and d_r is not None and d_ev != d_r:
             continue
-        if is_same_show_cross_source(ev, r) or is_same_show_cross_source(r, ev):
-            return True
+        if d_ev is None and d_r is None:
+            continue
+        if not (is_same_show_cross_source(ev, r) or is_same_show_cross_source(r, ev)):
+            continue
+        # wydarzenia.wroclaw.pl often has no date in the anchor; Krajownik has "12 Kwietnia …".
+        if (d_ev is None) ^ (d_r is None):
+            ta, tb = _norm(ev.title), _norm(r.title)
+            lo, sh = (ta, tb) if len(ta) >= len(tb) else (tb, ta)
+            pr = max(partial_ratio(lo, sh), partial_ratio(sh, lo))
+            if pr < 48:
+                continue
+            if pr < 62 and token_set_ratio(ta, tb) < 42:
+                continue
+        return True
     return False
 
 
@@ -316,8 +349,11 @@ def fingerprint(ev: Event) -> str:
         return f"meetup:{mmu.group(1)}"
     stem = _krajownik_slug_stem(ev.url or "")
     if stem:
-        d = _event_local_date(ev, _dedupe_tz())
-        return f"kraj:{stem}:{d.isoformat() if d else 'undated'}"
+        # Stem only: date suffix caused undated vs parsed flips and hourly duplicate posts.
+        return f"kraj:{stem}"
+    wwk = _wydarzenia_wroclaw_path_key(ev.url or "")
+    if wwk:
+        return f"ww:{wwk}"
     goid = _wroclaw_go_numeric_id(ev.url or "")
     if goid:
         # Numeric id only: date-based keys drift between runs (LD vs anchor, startDate tweaks),
