@@ -79,6 +79,82 @@ def _month_num(token: str) -> int | None:
     return None
 
 
+# Meetup card anchors: "Tue, Apr 28 · 6:00 PM CEST · …" or "April 28, 2026"
+_EN_MONTH_3: dict[str, int] = {
+    "jan": 1,
+    "feb": 2,
+    "mar": 3,
+    "apr": 4,
+    "may": 5,
+    "jun": 6,
+    "jul": 7,
+    "aug": 8,
+    "sep": 9,
+    "oct": 10,
+    "nov": 11,
+    "dec": 12,
+}
+_MEETUP_WKD_MON_DAY = re.compile(
+    r"\b(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun),\s*([A-Za-z]+)\s+(\d{1,2})(?:,?\s*(\d{4}))?\b",
+    re.I,
+)
+_MEETUP_MON_DAY_DOT = re.compile(r"\b([A-Za-z]+)\s+(\d{1,2})\s*·", re.I)
+_MEETUP_MON_DAY_YEAR = re.compile(r"\b([A-Za-z]+)\s+(\d{1,2}),\s*(\d{4})\b", re.I)
+
+
+def _en_month_from_token(tok: str) -> int | None:
+    return _EN_MONTH_3.get((tok or "").strip().lower()[:3])
+
+
+def _finalize_calendar_day(mon: int, dom: int, yr: int, d_now: date) -> date | None:
+    try:
+        resolved = date(yr, mon, dom)
+    except ValueError:
+        return None
+    if resolved < d_now - timedelta(days=400):
+        return None
+    if resolved < d_now:
+        try:
+            resolved = date(yr + 1, mon, dom)
+        except ValueError:
+            return None
+    return resolved
+
+
+def _parse_meetup_title_when(title: str, now: datetime) -> _Resolved | None:
+    """English month/day in Meetup listing anchor text (date is not in raw_date_text)."""
+    t = title or ""
+    d_now = now.date()
+    mon = dom = None
+    yr: int | None = None
+
+    m = _MEETUP_WKD_MON_DAY.search(t)
+    if m:
+        mon = _en_month_from_token(m.group(1))
+        dom = int(m.group(2))
+        yr = int(m.group(3)) if m.group(3) else d_now.year
+    if mon is None or dom is None:
+        m2 = _MEETUP_MON_DAY_DOT.search(t)
+        if m2:
+            mon = _en_month_from_token(m2.group(1))
+            dom = int(m2.group(2))
+            yr = d_now.year
+    if mon is None or dom is None:
+        m3 = _MEETUP_MON_DAY_YEAR.search(t)
+        if m3:
+            mon = _en_month_from_token(m3.group(1))
+            dom = int(m3.group(2))
+            yr = int(m3.group(3))
+
+    if mon is None or dom is None or yr is None:
+        return None
+    resolved = _finalize_calendar_day(mon, dom, yr, d_now)
+    if resolved is None:
+        return None
+    # Whole-day resolution avoids mis-parsing 12h times in "6:00 PM".
+    return _Resolved(resolved, None)
+
+
 def _extract_time_portion(text: str) -> time | None:
     m = _TIME_O_CLOCK.search(text)
     if not m:
@@ -198,7 +274,14 @@ def resolve_when(ev: Event, now: datetime) -> _Resolved | None:
     if r is not None:
         return r
     if ev.raw_date_text:
-        return _parse_raw_when(ev.raw_date_text, now)
+        r = _parse_raw_when(ev.raw_date_text, now)
+        if r is not None:
+            return r
+    u = (ev.url or "").lower()
+    if "meetup.com" in u and ev.title:
+        r = _parse_meetup_title_when(ev.title, now)
+        if r is not None:
+            return r
     return None
 
 
