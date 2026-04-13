@@ -38,6 +38,7 @@ _JUNK_TITLE_EQ = frozenset(
         "jerzy grotowski",
         "e-mail: impart@impart.pl",
         "in your pocket",
+        "kup bilet",
     }
 )
 
@@ -396,6 +397,12 @@ def _generic_link_keeps(text: str, url: str) -> bool:
         return False
     if "ebilet.pl" in netloc and "/miasto/" in path:
         return False
+    if "wteatrw.pl" in netloc.replace("www.", ""):
+        # Combined-ticket product pages (not a single dated performance); ticket anchor dupes.
+        if "bilet_laczony" in path:
+            return False
+        if "#to_tickets" in low_u:
+            return False
     if "google." in netloc and "search" in path:
         return False
     if "encyklopedia" in path or "resetujpass" in path:

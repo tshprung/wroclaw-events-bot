@@ -33,6 +33,9 @@ _DEFAULT_URL_PARTS: frozenset[str] = frozenset(
         "staryklasztor.pl",
         # WTeatrW CMS: /Repertuar,N is the repertoire index, not a single show.
         "wteatrw.pl/repertuar,",
+        # WTeatrW: combined ticket bundles and in-page ticket anchors, not one show date.
+        "bilet_laczony",
+        "#to_tickets",
         # GoOut marketing / shop list, not events (other pages may still link here).
         "goout.net/pl/ticket-shops",
         # Kino Nowe Horyzonty ticketing / showtimes (not "events" for this bot).
