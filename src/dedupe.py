@@ -78,6 +78,10 @@ def _is_krajownik_wroclaw_event_detail(url: str) -> bool:
     return parts[0].lower() == "wroclaw" and parts[1].lower() == "wydarzenia"
 
 
+# WordPress duplicate permalinks: same title republished as …-2, …-3. Keep 4+ digit tails (years, ids).
+_WW_PATH_LEAF_DUP_SUFFIX = re.compile(r"-\d{1,3}$", re.I)
+
+
 def _wydarzenia_wroclaw_path_key(url: str) -> str | None:
     """Stable key for wydarzenia.wroclaw.pl event pages (was title|…, caused repeats vs Krajownik)."""
     p = urlparse(url or "")
@@ -87,6 +91,14 @@ def _wydarzenia_wroclaw_path_key(url: str) -> str | None:
     path = unquote((p.path or "").strip().rstrip("/")).lower()
     if len(path) < 3:
         return None
+    parts = [x for x in path.split("/") if x]
+    if not parts:
+        return None
+    leaf = parts[-1]
+    stem = _WW_PATH_LEAF_DUP_SUFFIX.sub("", leaf)
+    if stem != leaf:
+        parts[-1] = stem
+        path = "/" + "/".join(parts)
     return path
 
 
