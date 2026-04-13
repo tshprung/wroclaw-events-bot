@@ -394,6 +394,8 @@ def _generic_link_keeps(text: str, url: str) -> bool:
     path = raw_path.lower()
     if "ebilet.pl" in netloc and "/klasyka/koncert" in path:
         return False
+    if "ebilet.pl" in netloc and "/miasto/" in path:
+        return False
     if "google." in netloc and "search" in path:
         return False
     if "encyklopedia" in path or "resetujpass" in path:
