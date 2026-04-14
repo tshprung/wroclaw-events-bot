@@ -628,8 +628,118 @@ def parse_generic_links(source: Source, html: str, *, link_limit: int = 50) -> l
 
 
 def parse_ebilet_pl(source: Source, html: str) -> list[Event]:
-    """eBilet front page — many tiles; higher link cap than default generic scrapes."""
-    return parse_generic_links(source, html, link_limit=120)
+    """eBilet front page — use JSON-LD to keep real Event rows (then window filters)."""
+    out = _parse_ebilet_jsonld(source, html, require_wroclaw=True)
+    if out:
+        return out
+    return _parse_ebilet_embedded_schema(source, html, require_wroclaw=True)
+
+
+def parse_ebilet_city(source: Source, html: str) -> list[Event]:
+    """eBilet city page (e.g. /miasto/wroclaw) — use JSON-LD Event rows."""
+    out = _parse_ebilet_jsonld(source, html, require_wroclaw=True)
+    if out:
+        return out
+    return _parse_ebilet_embedded_schema(source, html, require_wroclaw=True)
+
+
+def _parse_ebilet_jsonld(source: Source, html: str, *, require_wroclaw: bool) -> list[Event]:
+    tzinfo = dttz.gettz("Europe/Warsaw") or dttz.tzlocal()
+    out: list[Event] = []
+    seen: set[str] = set()
+    for script in soup(html).select('script[type="application/ld+json"]'):
+        raw = (script.string or "").strip()
+        if not raw:
+            continue
+        try:
+            data = json.loads(raw)
+        except json.JSONDecodeError:
+            continue
+        objs = data if isinstance(data, list) else [data]
+        for item in objs:
+            if not isinstance(item, dict):
+                continue
+            typ = item.get("@type")
+            is_event = typ == "Event" or (isinstance(typ, list) and "Event" in typ)
+            if not is_event:
+                continue
+            name = _clean(item.get("name") or "")
+            sd = item.get("startDate")
+            url = (item.get("url") or "").strip()
+            if not name or not sd or not url:
+                continue
+            try:
+                st = dtparser.isoparse(str(sd).replace("Z", "+00:00"))
+            except (ValueError, TypeError):
+                continue
+            if st.tzinfo is None:
+                st = st.replace(tzinfo=tzinfo)
+            else:
+                st = st.astimezone(tzinfo)
+
+            loc = item.get("location")
+            venue = None
+            locality = ""
+            if isinstance(loc, dict):
+                venue = _clean(loc.get("name") or "") or None
+                addr = loc.get("address")
+                if isinstance(addr, dict):
+                    locality = _clean(addr.get("addressLocality") or "")
+            if require_wroclaw:
+                if "wroclaw" not in _fold_match(f"{name} {venue or ''} {locality} {url}"):
+                    continue
+
+            url = url.split("#")[0].rstrip("/")
+            if url in seen:
+                continue
+            seen.add(url)
+            out.append(Event(source_id=source.id, title=name, start_at=st, venue=venue, url=url, raw_date_text=None))
+    return out
+
+
+_EBILET_EMBEDDED_EVENT = re.compile(
+    r'"name"\s*:\s*"(?P<name>[^"]{3,200})"\s*,'
+    r'[\s\S]{0,900}?"startDate"\s*:\s*"(?P<start>\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})"'
+    r'[\s\S]{0,1400}?"url"\s*:\s*"(?P<url>https?://(?:www\.)?ebilet\.pl/[^"]{5,500})"',
+    re.I,
+)
+
+
+def _ebilet_slug_title(url: str) -> str:
+    path = unquote(urlparse(url).path or "").strip().rstrip("/")
+    leaf = (path.split("/")[-1] if path else "").strip()
+    return _clean(leaf.replace("-", " ").replace("_", " ")) or "Wydarzenie (eBilet)"
+
+
+def _parse_ebilet_embedded_schema(source: Source, html: str, *, require_wroclaw: bool) -> list[Event]:
+    tzinfo = dttz.gettz("Europe/Warsaw") or dttz.tzlocal()
+    out: list[Event] = []
+    seen: set[str] = set()
+    for m in _EBILET_EMBEDDED_EVENT.finditer(html):
+        url = (m.group("url") or "").split("#")[0].rstrip("/")
+        sd = m.group("start")
+        if not url or not sd:
+            continue
+        try:
+            st = dtparser.isoparse(sd)
+        except (ValueError, TypeError):
+            continue
+        if st.tzinfo is None:
+            st = st.replace(tzinfo=tzinfo)
+        else:
+            st = st.astimezone(tzinfo)
+        if require_wroclaw:
+            lo, hi = max(0, m.start() - 1200), min(len(html), m.end() + 1200)
+            blob = html[lo:hi]
+            folded = _fold_match(blob)
+            # Be strict: require Wrocław locality, not just an organizer name containing "Wrocław".
+            if "addresslocality" not in folded or "wroclaw" not in folded:
+                continue
+        if url in seen:
+            continue
+        seen.add(url)
+        out.append(Event(source_id=source.id, title=_ebilet_slug_title(url), start_at=st, venue=None, url=url, raw_date_text=None))
+    return out
 
 
 def parse_nowiny_olesnickie_wydarzenia(source: Source, html: str) -> list[Event]:
@@ -946,7 +1056,7 @@ def parser_for_kind(kind: str) -> Callable[[Source, str], list[Event]]:
         "wydarzenia_wroclaw": parse_generic_links,
         "pik": parse_pik,
         "crossweb": parse_generic_links,
-        "ebilet_city": parse_generic_links,
+        "ebilet_city": parse_ebilet_city,
         "ebilet_pl": parse_ebilet_pl,
         "nowiny_olesnickie_wydarzenia": parse_nowiny_olesnickie_wydarzenia,
         "wroclaw_travel_calendar": parse_generic_links,
