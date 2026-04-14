@@ -700,6 +700,7 @@ def _parse_ebilet_jsonld(source: Source, html: str, *, require_wroclaw: bool) ->
 _EBILET_EMBEDDED_EVENT = re.compile(
     r'"name"\s*:\s*"(?P<name>[^"]{3,200})"\s*,'
     r'[\s\S]{0,900}?"startDate"\s*:\s*"(?P<start>\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})"'
+    r'(?:[\s\S]{0,300}?"endDate"\s*:\s*"(?P<end>\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})")?'
     r'[\s\S]{0,1400}?"url"\s*:\s*"(?P<url>https?://(?:www\.)?ebilet\.pl/[^"]{5,500})"',
     re.I,
 )
@@ -713,12 +714,15 @@ def _ebilet_slug_title(url: str) -> str:
 
 def _parse_ebilet_embedded_schema(source: Source, html: str, *, require_wroclaw: bool) -> list[Event]:
     tzinfo = dttz.gettz("Europe/Warsaw") or dttz.tzlocal()
-    out: list[Event] = []
-    seen: set[str] = set()
+    hits: list[tuple[str, datetime, str]] = []  # (url, start_at, folded_locality)
     for m in _EBILET_EMBEDDED_EVENT.finditer(html):
         url = (m.group("url") or "").split("#")[0].rstrip("/")
         sd = m.group("start")
+        ed = m.group("end")
         if not url or not sd:
+            continue
+        # If the card is a date range / multi-city series page, skip it.
+        if ed and ed != sd:
             continue
         try:
             st = dtparser.isoparse(sd)
@@ -728,17 +732,32 @@ def _parse_ebilet_embedded_schema(source: Source, html: str, *, require_wroclaw:
             st = st.replace(tzinfo=tzinfo)
         else:
             st = st.astimezone(tzinfo)
-        if require_wroclaw:
-            lo, hi = max(0, m.start() - 1200), min(len(html), m.end() + 1200)
-            blob = html[lo:hi]
-            folded = _fold_match(blob)
-            # Be strict: require Wrocław locality, not just an organizer name containing "Wrocław".
-            if "addresslocality" not in folded or "wroclaw" not in folded:
-                continue
-        if url in seen:
+
+        # Locality is usually embedded close to the same event object, but not always within the small match span.
+        frag = html[m.start() : min(len(html), m.end() + 6000)]
+        ml = re.search(r'addressLocality"\s*:\s*"([^"]{2,80})"', frag, re.I)
+        if not ml:
             continue
-        seen.add(url)
-        out.append(Event(source_id=source.id, title=_ebilet_slug_title(url), start_at=st, venue=None, url=url, raw_date_text=None))
+        loc = _fold_match(ml.group(1))
+        hits.append((url, st, loc))
+
+    # Drop tour/artist pages where one URL maps to many cities.
+    url_locs: dict[str, set[str]] = {}
+    for u, _st, loc in hits:
+        url_locs.setdefault(u, set()).add(loc)
+
+    out: list[Event] = []
+    seen: set[str] = set()
+    for u, st, loc in hits:
+        if u in seen:
+            continue
+        seen.add(u)
+        locs = url_locs.get(u) or set()
+        if len(locs) != 1:
+            continue
+        if require_wroclaw and "wroclaw" not in locs:
+            continue
+        out.append(Event(source_id=source.id, title=_ebilet_slug_title(u), start_at=st, venue=None, url=u, raw_date_text=None))
     return out
 
 
