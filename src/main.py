@@ -5,7 +5,7 @@ import os
 import pathlib
 import sqlite3
 import uuid
-from datetime import datetime
+from datetime import datetime, time as dt_time
 
 import requests
 import yaml
@@ -193,7 +193,9 @@ def main() -> int:
     max_posts = int(os.environ.get("MAX_POSTS_PER_RUN", "30"))
     posts_sent = 0
     post_mode = os.environ.get("POST_MODE", "immediate").strip().lower()  # immediate|digest
-    digest_lines: list[str] = []
+    # Queue new events and post after sorting (avoid per-source ordering bias).
+    # Each entry: (resolved_dt_or_none, msg, Event, verify_ssl)
+    post_queue: list[tuple[datetime | None, str, Event, bool]] = []
     window_days, window_include_undated = load_window_options()
     log.info(
         "Event window: days=%d include_undated=%s TIMEZONE=%s (set via EVENT_WINDOW_* / TIMEZONE)",
@@ -322,37 +324,15 @@ def main() -> int:
                             venue=ev.venue,
                             url=ev.url,
                         )
-                        if post_mode == "digest":
-                            if len(digest_lines) < max_posts:
-                                digest_lines.append(msg)
-                            continue
-
-                        if posts_sent >= max_posts:
-                            continue
-                        if settings.dry_run:
-                            log.info("[DRY_RUN] New: %s", _short(msg, 220))
-                        else:
-                            assert telegram is not None
-                            try:
-                                # Best-effort: attach a cover image when the event page exposes one.
-                                img_url: str | None = None
-                                try:
-                                    res2 = fetch_url(session, ev.url, verify=src.verify_ssl)
-                                    if res2.status_code < 400:
-                                        img_url = extract_social_image_url(res2.final_url or ev.url, res2.text)
-                                except Exception:
-                                    img_url = None
-
-                                if img_url:
-                                    telegram.send_photo(settings.telegram_channel_id, img_url, caption=msg)
-                                else:
-                                    telegram.send_message(settings.telegram_channel_id, msg)
-                                posts_sent += 1
-                            except RuntimeError as e:
-                                log.error(
-                                    "Telegram channel post failed (events are still saved): %s",
-                                    e,
-                                )
+                        r = resolve_when(ev, now_local)
+                        when_dt: datetime | None = None
+                        if r is not None:
+                            if r.tm is not None:
+                                when_dt = datetime.combine(r.day, r.tm, tzinfo=now_local.tzinfo)
+                            else:
+                                # Whole-day resolution: order by start-of-day.
+                                when_dt = datetime.combine(r.day, dt_time.min, tzinfo=now_local.tzinfo)
+                        post_queue.append((when_dt, msg, ev, bool(src.verify_ssl)))
 
                 log.info(
                     "[%s] parsed=%d kept=%d new=%d",
@@ -389,10 +369,22 @@ def main() -> int:
                 total_fail += 1
                 log.exception("[%s] failed: %s", src.id, e)
 
-        # Post digest if enabled
-        if post_mode == "digest" and digest_lines:
-            header = f"New events found: {len(digest_lines)}"
-            body = "\n\n".join(digest_lines)
+        def _queue_sort_key(it: tuple[datetime | None, str, Event, bool]) -> tuple[int, datetime]:
+            dtv = it[0]
+            if dtv is None:
+                # Undated last (only if window_include_undated=True).
+                return (1, datetime.max.replace(tzinfo=now_local.tzinfo))
+            return (0, dtv)
+
+        # Post after sorting by (date,time) across all sources.
+        if post_queue:
+            post_queue.sort(key=_queue_sort_key)
+
+        if post_mode == "digest" and post_queue:
+            sliced = post_queue[:max_posts]
+            lines = [msg for _dtv, msg, _ev, _vssl in sliced]
+            header = f"New events found: {len(lines)}"
+            body = "\n\n".join(lines)
             digest_msg = f"{header}\n\n{body}"
             if settings.dry_run:
                 log.info("[DRY_RUN] Digest:\n%s", _short(digest_msg, 2000))
@@ -403,6 +395,33 @@ def main() -> int:
                     posts_sent += 1
                 except RuntimeError as e:
                     log.error("Telegram digest failed (events are still saved): %s", e)
+
+        if post_mode != "digest" and post_queue:
+            for _dtv, msg, ev, vssl in post_queue[:max_posts]:
+                if settings.dry_run:
+                    log.info("[DRY_RUN] New: %s", _short(msg, 220))
+                    continue
+                assert telegram is not None
+                try:
+                    # Best-effort: attach a cover image when the event page exposes one.
+                    img_url: str | None = None
+                    try:
+                        res2 = fetch_url(session, ev.url, verify=vssl)
+                        if res2.status_code < 400:
+                            img_url = extract_social_image_url(res2.final_url or ev.url, res2.text)
+                    except Exception:
+                        img_url = None
+
+                    if img_url:
+                        telegram.send_photo(settings.telegram_channel_id, img_url, caption=msg)
+                    else:
+                        telegram.send_message(settings.telegram_channel_id, msg)
+                    posts_sent += 1
+                except RuntimeError as e:
+                    log.error(
+                        "Telegram channel post failed (events are still saved): %s",
+                        e,
+                    )
 
         # Admin alert on repeated failures/blocks
         alerts = list_source_health_alerts(conn)
