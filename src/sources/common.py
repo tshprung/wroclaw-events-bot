@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 from dataclasses import dataclass
 import time
 from urllib.parse import urljoin, urlparse, urlunparse
@@ -201,6 +202,26 @@ def extract_social_image_url(base_url: str, html: str) -> str | None:
     for c in candidates:
         u = urljoin(base_url, c)
         if u.startswith("https://") or u.startswith("http://"):
+            # Krajownik currently serves a site-wide og-image.webp; prefer per-event thumbnail if embedded.
+            if "krajownik.pl" in (urlparse(base_url).netloc or "").lower() and u.rstrip("/") in (
+                "https://krajownik.pl/og-image.webp",
+                "https://www.krajownik.pl/og-image.webp",
+            ):
+                break
             return u
+
+    # Krajownik: per-event thumbnails are embedded as S3 webp URLs in page data, but OG tags are generic.
+    if "krajownik.pl" in (urlparse(base_url).netloc or "").lower():
+        i = html.lower().find("krajownik-prod-")
+        if i >= 0:
+            j = html.lower().find(".webp", i)
+            if j > i:
+                # Grab until ".webp" (inclusive) and strip surrounding punctuation/quotes.
+                frag = html[i : j + 5].strip().strip("\"' ,")
+                if (
+                    "s3.eu-central-1.amazonaws.com/public/event/thumbnails/" in frag.lower()
+                    and frag.lower().startswith("krajownik-prod-")
+                ):
+                    return "https://" + frag
     return None
 
