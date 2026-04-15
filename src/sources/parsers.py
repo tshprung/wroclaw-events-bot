@@ -39,6 +39,7 @@ _JUNK_TITLE_EQ = frozenset(
         "e-mail: impart@impart.pl",
         "in your pocket",
         "kup bilet",
+        "szczegóły",
     }
 )
 
@@ -960,24 +961,65 @@ def parse_tarczynski_arena(source: Source, html: str) -> list[Event]:
 
 
 def parse_nfm_repertuar(source: Source, html: str) -> list[Event]:
-    # NFM includes links to /component/nfmcalendar/event/<id>
-    links = extract_links(source.url, html, selector="a[href*='/component/nfmcalendar/event/']", limit=120)
+    # NFM repertuar is a listing with month/day + time (often without year in the visible card).
+    # Extract (DD.MM[.YYYY] HH:MM) from the card DOM so window filtering works.
+    s = soup(html)
     out: list[Event] = []
-    seen = set()
-    for text, url in links:
-        if "/component/nfmcalendar/event/" not in url:
+    seen: set[str] = set()
+    now_y = datetime.now().year
+
+    for a in s.select("a[href*='/component/nfmcalendar/event/']"):
+        href = (a.get("href") or "").strip()
+        if not href:
             continue
-        # Strip tracking parameters (occasionally present on share links).
+        url = urljoin(source.url, href)
         p = urlparse(url)
         if not (p.scheme and p.netloc and p.path):
             continue
         clean_url = f"{p.scheme}://{p.netloc}{p.path}"
-        if not clean_url.startswith(("http://", "https://")):
-            continue
         if clean_url in seen:
             continue
+
+        # The event row container holds date/time blocks.
+        card = a.find_parent(class_="nfmELItem")
+
+        t = _clean(a.get_text(" ", strip=True) or "")
+        if not t or t.lower() in _JUNK_TITLE_EQ or _JUNK_TITLE_RE.match(t):
+            # Some buttons/tiles use "Szczegóły" etc.; ignore those.
+            continue
+
+        date_txt = ""
+        time_txt = ""
+        if card:
+            de = card.select_one(".nfmEDDate")
+            te = card.select_one(".nfmEDTime")
+            date_txt = _clean(de.get_text(" ", strip=True) if de else "")
+            time_txt = _clean(te.get_text(" ", strip=True) if te else "")
+
+        dmy = None
+        md = re.search(r"^(\\d{1,2})\\.(\\d{1,2})(?:\\.(\\d{4}))?$", date_txt)
+        if md:
+            dom, mon = int(md.group(1)), int(md.group(2))
+            if 1 <= mon <= 12 and 1 <= dom <= 31:
+                yr = int(md.group(3)) if md.group(3) else now_y
+                dmy = f"{dom:02d}.{mon:02d}.{yr}"
+        tm = None
+        mt = re.search(r"^(\\d{1,2}:\\d{2})$", time_txt)
+        if mt:
+            tm = mt.group(1)
+        raw_when = None
+        if dmy and tm:
+            raw_when = f"{dmy} {tm}"
+        elif dmy:
+            raw_when = dmy
+        else:
+            # Without a date, NFM listings create undated rows that bypass the window filter.
+            continue
+
         seen.add(clean_url)
-        out.append(Event(source_id=source.id, title=_clean(text), start_at=None, venue="NFM", url=clean_url))
+        out.append(Event(source_id=source.id, title=t, start_at=None, venue="NFM", url=clean_url, raw_date_text=raw_when))
+        if len(out) >= 160:
+            break
     return out
 
 
