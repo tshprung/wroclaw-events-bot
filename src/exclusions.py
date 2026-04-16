@@ -48,6 +48,8 @@ _DEFAULT_URL_PARTS: frozenset[str] = frozenset(
         "wydarzenia.wroclaw.pl/blog/",
         # wroclaw.pl/go listing anchors — same calendar row, not a permalink.
         "#evt-",
+        # osiedle.wroc.pl: admin/news item (not an event).
+        "zmiany-w-satucie",
     }
 )
 
@@ -58,6 +60,17 @@ _DEFAULT_VENUE_PARTS: frozenset[str] = frozenset(
         "panorama raclawicka",
         "muzeum architektury",
         "bwa wroclaw",
+    }
+)
+
+_DEFAULT_TITLE_PARTS: frozenset[str] = frozenset(
+    {
+        # Ticket-sales announcements (not a concrete, dated event page).
+        "sprzedaz biletow",
+        "rozpoczynamy sprzedaz biletow",
+        # Osiedle council admin/news posts (not events).
+        "statut",
+        "statucie",
     }
 )
 
@@ -76,6 +89,9 @@ def _all_url_parts() -> frozenset[str]:
 def _all_venue_parts() -> frozenset[str]:
     return _DEFAULT_VENUE_PARTS | _extra_from_env("EVENT_EXCLUDE_VENUE_SUBSTR")
 
+def _all_title_parts() -> frozenset[str]:
+    return _DEFAULT_TITLE_PARTS | _extra_from_env("EVENT_EXCLUDE_TITLE_SUBSTR")
+
 
 def event_is_excluded(ev: Event) -> bool:
     u_raw = (ev.url or "").strip()
@@ -85,6 +101,24 @@ def event_is_excluded(ev: Event) -> bool:
     for frag in _all_url_parts():
         if frag in u:
             return True
+
+    # Title-based exclusions are only safe when scoped to known hosts that emit
+    # lots of non-event news posts into the generic_links feed.
+    host = ""
+    try:
+        host = (u.split("/")[2] if "://" in u else "").lower()
+    except Exception:
+        host = ""
+    title_f = _fold(ev.title or "")
+    if title_f:
+        if "teatr-capitol.pl" in host:
+            for frag in _all_title_parts():
+                if frag in title_f:
+                    return True
+        if "osiedle.wroc.pl" in host:
+            for frag in _all_title_parts():
+                if frag in title_f:
+                    return True
     ven = _fold(ev.venue or "")
     if not ven:
         return False
