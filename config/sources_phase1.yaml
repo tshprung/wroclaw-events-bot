@@ -163,12 +163,14 @@ sources:
     kind: kino_nh
     enabled: true
 
+  # Official site: broken TLS chain on www + 301 to apex often fails from servers.
+  # Same venue is ingested via wroclaw.pl/go: go_miejsce_centrum_historii_zajezdnia (sources_osiedla.yaml).
   - id: zajezdnia
     name: Centrum Historii Zajezdnia (wydarzenia)
     url: https://www.zajezdnia.org/wydarzenia/
     kind: generic_links
     verify_ssl: false
-    enabled: true
+    enabled: false
 
   - id: hydropolis
     name: Hydropolis aktualności

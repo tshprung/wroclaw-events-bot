@@ -425,6 +425,8 @@ def main() -> int:
 
         # Admin alert on repeated failures/blocks
         alerts = list_source_health_alerts(conn)
+        enabled_ids = {s.id for s in sources}
+        alerts = [a for a in alerts if a["source_id"] in enabled_ids]
         if alerts:
             lines = []
             for a in alerts[:20]:
