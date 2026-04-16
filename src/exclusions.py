@@ -50,6 +50,9 @@ _DEFAULT_URL_PARTS: frozenset[str] = frozenset(
         "#evt-",
         # osiedle.wroc.pl: admin/news item (not an event).
         "zmiany-w-satucie",
+        # wroclaw.pl: informational/category hubs (not single events).
+        "wroclaw.pl/poradnik-mieszkanca/kategoria/",
+        "wroclaw.pl/inwestycje-wroclaw/aktualnosci-inwestycje",
     }
 )
 
