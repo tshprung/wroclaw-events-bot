@@ -50,11 +50,12 @@ sources:
     kind: wroclaw_go
     enabled: true
 
+  # Mirrors disabled opera_wroclawska scrape (operator preference).
   - id: go_miejsce_opera_wroclawska
     name: wroclaw.pl/go (Opera Wrocławska)
     url: https://www.wroclaw.pl/go/wydarzenia?miejsce=152-opera-wroclawska
     kind: wroclaw_go
-    enabled: true
+    enabled: false
 
   # --- Facebook — dzielnice i rejony (obok zapytan w phase1) ---
   - id: facebook_events_search_wroclaw_fabryczna

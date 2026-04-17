@@ -67,11 +67,12 @@ sources:
     kind: tarczynski_arena
     enabled: true
 
+  # National Forum of Music — adult classical/pop concert repertuar (operator preference).
   - id: nfm_repertuar
     name: NFM repertuar
     url: https://www.nfm.wroclaw.pl/repertuar
     kind: nfm_repertuar
-    enabled: true
+    enabled: false
 
   - id: meetup_wroclaw_events
     name: Meetup (events near Wrocław)
@@ -103,17 +104,18 @@ sources:
     kind: nowiny_olesnickie_wydarzenia
     enabled: true
 
+  # Adult-oriented concert / ticket feeds (operator preference).
   - id: ebilet_wroclaw
     name: eBilet Wrocław
     url: https://www.ebilet.pl/miasto/wroclaw
     kind: ebilet_city
-    enabled: true
+    enabled: false
 
   - id: ebilet_pl
     name: eBilet — strona główna (Polska; dużo szumu)
     url: https://www.ebilet.pl/
     kind: ebilet_pl
-    enabled: true
+    enabled: false
 
   - id: wroclawguide_calendar
     name: WroclawGuide calendar (EN)
@@ -127,23 +129,24 @@ sources:
     kind: wroclaw_travel_calendar
     enabled: true
 
+  # Adult drama / musical-theatre venue scrapes (operator preference); Teatr Lalek stays on.
   - id: opera_wroclawska
     name: Opera Wrocławska
     url: https://www.opera.wroclaw.pl/
     kind: generic_links
-    enabled: true
+    enabled: false
 
   - id: teatr_capitol
     name: Teatr Muzyczny Capitol
     url: https://www.teatr-capitol.pl/
     kind: generic_links
-    enabled: true
+    enabled: false
 
   - id: teatr_polski
     name: Teatr Polski we Wrocławiu
     url: https://www.teatrpolski.wroc.pl/
     kind: generic_links
-    enabled: true
+    enabled: false
 
   - id: instytut_grotowskiego
     name: Instytut Grotowskiego (wydarzenia)
@@ -184,11 +187,12 @@ sources:
     kind: generic_links
     enabled: true
 
+  # Bar / live-music calendar (operator preference).
   - id: hard_rock_wroclaw
     name: Hard Rock Cafe Wrocław (calendar)
     url: https://cafe.hardrock.com/wroclaw/event-calendar.aspx
     kind: generic_links
-    enabled: true
+    enabled: false
 
   - id: inyourpocket_wroclaw_events
     name: In Your Pocket Wrocław events
@@ -230,7 +234,7 @@ sources:
     name: Wrocławski Teatr Współczesny
     url: https://wteatrw.pl/
     kind: generic_links
-    enabled: true
+    enabled: false
 
   - id: zamek_wydarzenia
     name: Centrum Kultury Zamek — wydarzenia

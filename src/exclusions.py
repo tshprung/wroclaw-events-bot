@@ -53,6 +53,9 @@ _DEFAULT_URL_PARTS: frozenset[str] = frozenset(
         # wroclaw.pl: informational/category hubs (not single events).
         "wroclaw.pl/poradnik-mieszkanca/kategoria/",
         "wroclaw.pl/inwestycje-wroclaw/aktualnosci-inwestycje",
+        # Teatr Capitol: ticket-sale blog posts and memorial / news pages (not dated shows).
+        "teatr-capitol.pl/rozpoczynamy-sprzedaz-biletow",
+        "teatr-capitol.pl/pozegnanie-",
     }
 )
 
@@ -71,6 +74,8 @@ _DEFAULT_TITLE_PARTS: frozenset[str] = frozenset(
         # Ticket-sales announcements (not a concrete, dated event page).
         "sprzedaz biletow",
         "rozpoczynamy sprzedaz biletow",
+        # Polish “there are tickets on sale…” announcements (same idea as sprzedaż).
+        "sa bilety na",
         # Osiedle council admin/news posts (not events).
         "statut",
         "statucie",
