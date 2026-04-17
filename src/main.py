@@ -127,6 +127,40 @@ def _short(s: str, n: int = 140) -> str:
     return s if len(s) <= n else s[: n - 1] + "…"
 
 
+def _format_admin_source_alert_lines(alerts: list[dict], *, limit: int = 20) -> list[str]:
+    """Avoid spamming the admin chat when many osiedle.* sources fail for the same host outage."""
+    osiedle_block = [
+        a
+        for a in alerts
+        if (a.get("url") or "").lower().startswith("https://osiedle.wroc.pl/")
+        and a.get("last_http_status") is None
+        and a.get("last_error_kind") == "request_error"
+    ]
+    os_ids = {a["source_id"] for a in osiedle_block}
+    lines: list[str] = []
+    rest = [a for a in alerts if a["source_id"] not in os_ids]
+    if len(osiedle_block) >= 3:
+        mx = max(int(a.get("consecutive_failures") or 0) for a in osiedle_block)
+        sample = osiedle_block[0]
+        det = (sample.get("last_error_detail") or "").strip()
+        tail = f"\nDetail: {_short(det, 220)}" if det else ""
+        lines.append(
+            "osiedle.wroc.pl (cluster): "
+            f"{len(osiedle_block)} sources x request_error (max consecutive failures={mx}); status=None\n"
+            f"Example: {sample['source_id']}\n{sample['url']}{tail}\n"
+            f"({len(osiedle_block)} osiedle.* sources share one host — outages affect all.)"
+        )
+    else:
+        rest = list(alerts)
+
+    budget = max(0, limit - len(lines))
+    for a in rest[:budget]:
+        lines.append(
+            f"{a['source_id']}: fails={a['consecutive_failures']} status={a['last_http_status']} kind={a['last_error_kind']}\n{a['url']}"
+        )
+    return lines
+
+
 def _wroclaw_go_page_url(base: str, page: int) -> str:
     if page <= 1:
         return base
@@ -428,11 +462,7 @@ def main() -> int:
         enabled_ids = {s.id for s in sources}
         alerts = [a for a in alerts if a["source_id"] in enabled_ids]
         if alerts:
-            lines = []
-            for a in alerts[:20]:
-                lines.append(
-                    f"{a['source_id']}: fails={a['consecutive_failures']} status={a['last_http_status']} kind={a['last_error_kind']}\n{a['url']}"
-                )
+            lines = _format_admin_source_alert_lines(alerts, limit=20)
             alert_msg = "Source alerts (consider skipping / fixing):\n\n" + "\n\n".join(lines)
             if settings.admin_telegram_id:
                 if settings.dry_run:

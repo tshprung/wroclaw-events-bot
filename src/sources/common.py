@@ -30,6 +30,25 @@ def _http_timeout() -> tuple[float, float]:
     return (10.0, 35.0)
 
 
+def _fetch_attempts_and_timeout(url: str, timeout: tuple[float, float] | None) -> tuple[int, tuple[float, float]]:
+    """Default 3 tries; osiedle.wroc.pl is often flaky — allow more attempts and longer waits."""
+    host = (urlparse(url).netloc or "").lower()
+    if host in ("osiedle.wroc.pl", "www.osiedle.wroc.pl"):
+        raw_a = (os.environ.get("HTTP_FETCH_OSIEDLE_ATTEMPTS") or "").strip()
+        try:
+            attempts = int(raw_a) if raw_a else 6
+        except ValueError:
+            attempts = 6
+        attempts = max(1, min(attempts, 12))
+        if timeout is not None:
+            return attempts, timeout
+        c, r = _http_timeout()
+        return attempts, (max(c, 15.0), max(r, 55.0))
+    if timeout is None:
+        return 3, _http_timeout()
+    return 3, timeout
+
+
 @dataclass(frozen=True)
 class FetchResult:
     status_code: int
@@ -133,11 +152,10 @@ def fetch_url(
     if verify is False:
         urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-    if timeout is None:
-        timeout = _http_timeout()
+    attempts, timeout = _fetch_attempts_and_timeout(url, timeout)
 
     last_exc: Exception | None = None
-    for attempt in range(3):
+    for attempt in range(attempts):
         try:
             r = session.get(
                 url,
