@@ -53,6 +53,11 @@ _DEFAULT_URL_PARTS: frozenset[str] = frozenset(
         # wroclaw.pl: informational/category hubs (not single events).
         "wroclaw.pl/poradnik-mieszkanca/kategoria/",
         "wroclaw.pl/inwestycje-wroclaw/aktualnosci-inwestycje",
+        # wroclaw.pl/go and wydarzenia.wroclaw.pl topic hubs (not single events).
+        "wroclaw.pl/go/wydarzenia/teatr",
+        "wroclaw.pl/go/wydarzenia/muzyka",
+        "wydarzenia.wroclaw.pl/muzyka_pop",
+        "wydarzenia.wroclaw.pl/muzyka_jazz",
         # Teatr Capitol: ticket-sale blog posts and memorial / news pages (not dated shows).
         "teatr-capitol.pl/rozpoczynamy-sprzedaz-biletow",
         "teatr-capitol.pl/pozegnanie-",
@@ -108,6 +113,10 @@ def event_is_excluded(ev: Event) -> bool:
     u = u_raw.lower()
     for frag in _all_url_parts():
         if frag in u:
+            return True
+    # Operator policy: drop by URL keyword (case-insensitive via `u`).
+    for kw in ("koncert", "teatr", "jazz", "dating"):
+        if kw in u:
             return True
 
     # Title-based exclusions are only safe when scoped to known hosts that emit

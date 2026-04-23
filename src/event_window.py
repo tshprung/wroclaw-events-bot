@@ -278,6 +278,11 @@ def resolve_when(ev: Event, now: datetime) -> _Resolved | None:
         if r is not None:
             return r
     u = (ev.url or "").lower()
+    # Crossweb list anchors often look like "14.05 Czw Title …" with no structured date field.
+    if "crossweb.pl" in u and ev.title:
+        r = _parse_raw_when(ev.title, now)
+        if r is not None:
+            return r
     if "meetup.com" in u and ev.title:
         r = _parse_meetup_title_when(ev.title, now)
         if r is not None:
