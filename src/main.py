@@ -435,6 +435,20 @@ def main() -> int:
                 if settings.dry_run:
                     log.info("[DRY_RUN] New: %s", _short(msg, 220))
                     continue
+                # Safety: never post events that already started.
+                # (Some sources embed the date/time in titles; if parsing fails anywhere, this is the last gate.)
+                r_now = resolve_when(ev, now_local)
+                if r_now is not None and r_now.tm is not None:
+                    ev_start = datetime.combine(r_now.day, r_now.tm, tzinfo=now_local.tzinfo)
+                    if ev_start <= now_local:
+                        log.info(
+                            "Skip already-started event (start=%s now=%s) url=%s title=%r",
+                            ev_start.isoformat(),
+                            now_local.isoformat(),
+                            ev.url,
+                            _short(ev.title, 120),
+                        )
+                        continue
                 assert telegram is not None
                 try:
                     # Best-effort: attach a cover image when the event page exposes one.

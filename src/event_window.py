@@ -278,6 +278,12 @@ def resolve_when(ev: Event, now: datetime) -> _Resolved | None:
         if r is not None:
             return r
     u = (ev.url or "").lower()
+    # Krajownik cards often embed "DD Month YYYY, od HH:MM" directly in the title.
+    # If we don't parse it here, these events look "undated" and can leak through filtering.
+    if "krajownik.pl" in u and ev.title:
+        r = _parse_raw_when(ev.title, now)
+        if r is not None:
+            return r
     # Crossweb list anchors often look like "14.05 Czw Title …" with no structured date field.
     if "crossweb.pl" in u and ev.title:
         r = _parse_raw_when(ev.title, now)
@@ -329,9 +335,9 @@ def event_in_window(
 
 
 def load_window_options() -> tuple[int, bool]:
-    days = int(os.environ.get("EVENT_WINDOW_DAYS", "7"))
+    days = int(os.environ.get("EVENT_WINDOW_DAYS", "3"))
     if days < 1:
-        days = 7
+        days = 3
     # Default 1: many Phase-1 parsers do not emit dates yet; set EVENT_WINDOW_INCLUDE_UNDATED=0 for strict mode.
     include_undated = os.environ.get("EVENT_WINDOW_INCLUDE_UNDATED", "1").strip().lower() in (
         "1",
