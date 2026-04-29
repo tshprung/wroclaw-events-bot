@@ -13,6 +13,8 @@ class Source:
     enabled: bool = True
     # Some sites have broken chains; set false in sources YAML only when needed.
     verify_ssl: bool = True
+    # For `parse_generic_links` (and parsers that delegate to it): max `<a href>` rows scanned.
+    link_limit: int | None = None
 
 
 

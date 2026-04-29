@@ -4,7 +4,7 @@ Collect upcoming events in Wrocław from ~30 **HTTP-only** sources (no login/cap
 
 ## How it runs
 
-- Intended schedule: **hourly at :05**, **06:05–21:05 Europe/Warsaw** (cron on the VM; the bot still only *does work* between 06:00 and 21:59 local).
+- Intended schedule: **every 2 hours at :05**, **06:05–22:05 Europe/Warsaw** (cron on the VM; the bot only *does work* between **06:00 and 22:59** local — same window as `TIMEZONE` / `Europe/Warsaw`).
 - Each run:
   - fetches sources listed in [`config/sources_phase1.yaml`](config/sources_phase1.yaml)
   - parses list pages (and optional detail pages where enabled)
@@ -70,14 +70,15 @@ git push -u origin main
    - optional `MAX_POSTS_PER_RUN=30`
 4. Ensure timezone is correct (recommended):
    - set VM timezone to `Europe/Warsaw` **or** use `CRON_TZ=Europe/Warsaw` in crontab
-5. Add cron entry — **every hour at minute 5**, only in the hours the bot is allowed to run (06–21):
+5. Add cron entry — **every 2 hours at minute 5**, only in the hours the bot is allowed to run (**06–22** local, via `CRON_TZ=Europe/Warsaw` or a correctly zoned VM):
 
 ```cron
-5 6-21 * * * cd /opt/wroclaw-events-bot && /opt/wroclaw-events-bot/.venv/bin/python -m src.main >> /opt/wroclaw-events-bot/data/cron.log 2>&1
+CRON_TZ=Europe/Warsaw
+5 6-22/2 * * * cd /opt/wroclaw-events-bot && /opt/wroclaw-events-bot/.venv/bin/python -m src.main >> /opt/wroclaw-events-bot/data/cron.log 2>&1
 ```
 
-   - Fields are: `minute hour day month weekday` → here: at **:05**, every hour from **06** through **21**, every day.
-   - Alternative: `5 * * * *` runs at **:05 every hour** (00:05–23:05); runs outside 06:00–21:59 still start the process but exit immediately (see `src/main.py` allowed hours).
+   - Fields are: `minute hour day month weekday` → here: at **:05**, on hours **6, 8, 10, …, 22** (step of 2 within 6–22).
+   - Optional: `5 * * * *` runs at **:05 every hour**; runs outside **06:00–22:59** still start the process but exit immediately (see `src/main.py` `_within_allowed_hours`).
 
 ### GitHub Actions secrets required
 

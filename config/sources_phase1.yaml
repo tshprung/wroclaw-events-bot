@@ -29,12 +29,14 @@ sources:
     name: wroclaw.pl/go weekend summaries
     url: https://www.wroclaw.pl/go/zestawienia
     kind: generic_links
+    link_limit: 200
     enabled: true
 
   - id: wydarzenia_wroclaw
     name: wydarzenia.wroclaw.pl
     url: https://wydarzenia.wroclaw.pl/
     kind: wydarzenia_wroclaw
+    link_limit: 300
     enabled: true
 
   - id: pik_wroclaw
@@ -59,12 +61,14 @@ sources:
     name: Tarczyński Arena Wrocław
     url: https://tarczynskiarenawroclaw.pl/kalendarz-wydarzen/
     kind: tarczynski_arena
+    link_limit: 300
     enabled: true
 
   - id: tarczynski_arena_events
     name: Tarczyński Arena — /events/
     url: https://tarczynskiarenawroclaw.pl/events/
     kind: tarczynski_arena
+    link_limit: 300
     enabled: true
 
   # National Forum of Music — adult classical/pop concert repertuar (operator preference).
@@ -90,12 +94,14 @@ sources:
     name: Crossweb Wrocław
     url: https://crossweb.pl/wydarzenia/wroclaw/
     kind: crossweb
+    link_limit: 300
     enabled: true
 
   - id: krajownik_wroclaw_wydarzenia
     name: Krajownik — Wrocław / wydarzenia
     url: https://krajownik.pl/wroclaw/wydarzenia/
     kind: generic_links
+    link_limit: 300
     enabled: true
 
   - id: nowiny_olesnickie_wydarzenia_wroclaw
@@ -121,12 +127,14 @@ sources:
     name: WroclawGuide calendar (EN)
     url: https://www.wroclawguide.com/en/event-calendar-wroclaw/
     kind: wroclawguide_calendar
+    link_limit: 300
     enabled: true
 
   - id: wroclaw_travel_calendar
     name: WROCŁAW.travel calendar (EN)
     url: https://wroclaw.travel/en/event-calendar/
     kind: wroclaw_travel_calendar
+    link_limit: 300
     enabled: true
 
   # Adult drama / musical-theatre venue scrapes (operator preference); Teatr Lalek stays on.

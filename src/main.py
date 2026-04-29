@@ -39,11 +39,11 @@ log = logging.getLogger("wroclaw_events_bot")
 
 
 def _within_allowed_hours(now_local: datetime) -> bool:
-    # Allowed: 06:00 <= time <= 21:00 (inclusive start; inclusive end hour, run at 21:00)
+    # Allowed: 06:00–22:59 local (inclusive hours 6..22; e.g. cron at 22:05 may run).
     h = now_local.hour
     if h < 6:
         return False
-    if h > 21:
+    if h > 22:
         return False
     return True
 
@@ -81,6 +81,9 @@ def _load_sources(path: str) -> list[Source]:
         doc = yaml.safe_load(f)
     sources = []
     for s in doc.get("sources", []):
+        link_limit: int | None = None
+        if s.get("link_limit") is not None:
+            link_limit = int(s["link_limit"])
         sources.append(
             Source(
                 id=str(s["id"]),
@@ -89,6 +92,7 @@ def _load_sources(path: str) -> list[Source]:
                 kind=str(s.get("kind") or "generic_links"),
                 enabled=bool(s.get("enabled", True)),
                 verify_ssl=bool(s.get("verify_ssl", True)),
+                link_limit=link_limit,
             )
         )
     return sources
@@ -247,7 +251,7 @@ def main() -> int:
                 http_for_health: int = 200
 
                 if src.kind == "wroclaw_go":
-                    max_pages = max(1, min(30, int(os.environ.get("WROCLAW_GO_MAX_PAGES", "20"))))
+                    max_pages = max(1, min(30, int(os.environ.get("WROCLAW_GO_MAX_PAGES", "30"))))
                     failed_first = False
                     for page in range(1, max_pages + 1):
                         page_url = _wroclaw_go_page_url(src.url, page)

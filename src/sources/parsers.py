@@ -609,11 +609,18 @@ def parse_pik(source: Source, html: str) -> list[Event]:
     return out
 
 
-def parse_generic_links(source: Source, html: str, *, link_limit: int = 50) -> list[Event]:
+def parse_generic_links(source: Source, html: str, *, link_limit: int | None = None) -> list[Event]:
     # Generic fallback: create low-fidelity “events” from prominent links.
     # This is meant as scaffolding; source-specific parsers should replace it.
     out: list[Event] = []
-    links = extract_links(source.url, html, selector="a[href]", limit=link_limit)
+    if link_limit is not None:
+        lim = int(link_limit)
+    elif source.link_limit is not None:
+        lim = int(source.link_limit)
+    else:
+        lim = 50
+    lim = max(1, min(800, lim))
+    links = extract_links(source.url, html, selector="a[href]", limit=lim)
     seen = set()
     for text, url in links:
         if not _generic_link_keeps(text, url):
