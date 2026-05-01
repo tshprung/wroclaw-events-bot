@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import html as html_module
 import json
 import re
 import unicodedata
@@ -948,10 +949,67 @@ def parse_meetup_find(source: Source, html: str) -> list[Event]:
     return out
 
 
+_HALA_LIST_DATE_RANGE = re.compile(
+    r"^(\d{1,2}\.\d{1,2}\.\d{4})\s*-\s*(\d{1,2}\.\d{1,2}\.\d{4})\s*$",
+)
+_HALA_LIST_DATE_TIME_SLASH = re.compile(
+    r"^(\d{1,2}\.\d{1,2}\.\d{4})\s*/\s*(\d{1,2}:\d{2})\s*$",
+)
+
+
+def _hala_listing_raw_when_from_time_el(time_el) -> str | None:
+    """Turn <time> inner text into a string `event_window._parse_raw_when` understands."""
+    if time_el is None:
+        return None
+    raw = _clean(time_el.get_text(" ", strip=True))
+    if not raw:
+        return None
+    m = _HALA_LIST_DATE_RANGE.match(raw)
+    if m:
+        # Multi-day block: use first calendar day as the start for window filtering.
+        return m.group(1)
+    m2 = _HALA_LIST_DATE_TIME_SLASH.match(raw)
+    if m2:
+        return f"{m2.group(1)} {m2.group(2)}"
+    return raw
+
+
 def parse_hala_stulecia(source: Source, html: str) -> list[Event]:
-    links = extract_links(source.url, html, selector="a[href*='/wydarzenie/']", limit=80)
+    # Listing cards include <p class="post-date"><time>DD.MM.YYYY / HH:MM</time> or a date range.
+    # Without this, rows are undated and bypass EVENT_WINDOW_DAYS when EVENT_WINDOW_INCLUDE_UNDATED=1.
+    s = soup(html)
     out: list[Event] = []
-    seen = set()
+    seen: set[str] = set()
+    for art in s.select("div.event_list_big article"):
+        a = art.select_one("h2.post-title.entry-title a[href*='/wydarzenie/']")
+        if not a or not a.get("href"):
+            continue
+        href = (a.get("href") or "").strip().rstrip("/")
+        if "/wydarzenie/" not in href:
+            continue
+        if href in seen:
+            continue
+        title = _clean(a.get_text(" ", strip=True)) or _clean(html_module.unescape((a.get("title") or "").strip()))
+        if not title or title.lower() in _JUNK_TITLE_EQ or _JUNK_TITLE_RE.match(title):
+            continue
+        raw_when = _hala_listing_raw_when_from_time_el(art.select_one("p.post-date time"))
+        if not raw_when:
+            continue
+        seen.add(href)
+        out.append(
+            Event(
+                source_id=source.id,
+                title=title,
+                start_at=None,
+                venue="Hala Stulecia / WCK",
+                url=href,
+                raw_date_text=raw_when,
+            )
+        )
+    if out:
+        return out
+    # Markup changed: keep a low-fidelity fallback (undated — may bypass the time window).
+    links = extract_links(source.url, html, selector="a[href*='/wydarzenie/']", limit=80)
     for text, url in links:
         if "/wydarzenie/" not in url:
             continue
