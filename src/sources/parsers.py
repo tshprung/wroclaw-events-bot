@@ -6,8 +6,9 @@ import re
 import unicodedata
 from datetime import datetime
 from typing import Callable
-from urllib.parse import quote, unquote, urljoin, urlparse
+from urllib.parse import quote, unquote, urljoin, urlparse, urlunparse
 
+import requests
 from dateutil import parser as dtparser
 from dateutil import tz as dttz
 from rapidfuzz.fuzz import partial_ratio, token_set_ratio, token_sort_ratio
@@ -1020,9 +1021,98 @@ def parse_hala_stulecia(source: Source, html: str) -> list[Event]:
     return out
 
 
+_TA_UA = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+    )
+}
+
+
+def _tarczynski_canonical_event_url(abs_u: str) -> str | None:
+    """Map /events/<slug>/… (any ?occurrence=) to https://host/events/<slug>/."""
+    try:
+        p = urlparse((abs_u or "").strip())
+    except ValueError:
+        return None
+    if "tarczynskiarenawroclaw.pl" not in (p.netloc or "").lower():
+        return None
+    parts = [unquote(x) for x in (p.path or "").split("/") if x]
+    if parts and parts[0].lower() in {"en", "de", "uk"}:
+        parts = parts[1:]
+    if len(parts) != 2 or parts[0].lower() != "events":
+        return None
+    slug = parts[1]
+    if not slug or slug.lower() in {"events", "page"} or slug.isdigit():
+        return None
+    path = f"/events/{slug}/"
+    return urlunparse(("https", "tarczynskiarenawroclaw.pl", path, "", "", ""))
+
+
+def _tarczynski_event_page_exists(url: str, *, verify_ssl: bool) -> bool:
+    """Drop stale MEC links still embedded in HTML (404 on canonical event URL)."""
+    try:
+        r = requests.head(
+            url,
+            timeout=12,
+            allow_redirects=True,
+            verify=verify_ssl,
+            headers=_TA_UA,
+        )
+        if r.status_code in (405, 501):
+            r = requests.get(
+                url,
+                timeout=12,
+                allow_redirects=True,
+                verify=verify_ssl,
+                headers=_TA_UA,
+                stream=True,
+            )
+            try:
+                r.close()
+            except Exception:
+                pass
+        return r.status_code < 400
+    except requests.exceptions.RequestException:
+        # Network hiccup: keep the row rather than silently dropping real listings.
+        return True
+
+
 def parse_tarczynski_arena(source: Source, html: str) -> list[Event]:
-    # Calendar page includes event titles in headings; extract all links and keep those that look like event slugs if present.
-    return parse_generic_links(source, html)
+    # MEC embeds past ?occurrence= links; generic link extraction also picks nav noise.
+    # Canonicalize to /events/<slug>/ and require HTTP 200 so dead permalinks never post.
+    s = soup(html)
+    best_title: dict[str, str] = {}
+    for a in s.select("a[href*='/events/']"):
+        href = (a.get("href") or "").strip()
+        if not href:
+            continue
+        abs_u = urljoin(source.url, href)
+        canon = _tarczynski_canonical_event_url(abs_u)
+        if not canon:
+            continue
+        title = _clean(a.get_text(" ", strip=True)) or _clean(html_module.unescape((a.get("title") or "").strip()))
+        if not title or title.lower() in _JUNK_TITLE_EQ or _JUNK_TITLE_RE.match(title):
+            continue
+        prev = best_title.get(canon, "")
+        if len(title) >= len(prev):
+            best_title[canon] = title
+
+    verify = bool(source.verify_ssl)
+    out: list[Event] = []
+    for url, title in sorted(best_title.items(), key=lambda kv: kv[0]):
+        if not _tarczynski_event_page_exists(url, verify_ssl=verify):
+            continue
+        out.append(
+            Event(
+                source_id=source.id,
+                title=title,
+                start_at=None,
+                venue=None,
+                url=url,
+            )
+        )
+    return out
 
 
 def parse_nfm_repertuar(source: Source, html: str) -> list[Event]:
