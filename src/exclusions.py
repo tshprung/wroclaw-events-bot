@@ -63,9 +63,6 @@ _DEFAULT_URL_PARTS: frozenset[str] = frozenset(
         "wroclaw.pl/kultura/wroclawska-rada-kultury",
         "wroclaw.pl/sport/aktualnosci-sport-i-rekreacja-wroclaw",
         "wroclaw.pl/sport/rekreacja-we-wroclawiu",
-        # WroclawGuide: category filters, not single events.
-        "wroclawguide.com/en/events-category/",
-        "wroclawguide.com/events-category/",
         # wroclaw.pl/go and wydarzenia.wroclaw.pl topic hubs (not single events).
         "wroclaw.pl/go/wydarzenia/teatr",
         "wroclaw.pl/go/wydarzenia/muzyka",
@@ -133,11 +130,29 @@ def _wroclaw_go_wydarzenia_category_landing(url: str) -> bool:
     return parts[0].lower() == "go" and parts[1].lower() == "wydarzenia"
 
 
+def _wroclawguide_listing_hub_url(url: str) -> bool:
+    """WroclawGuide calendar root, month views, and /events-category/* filters — not single events."""
+    try:
+        p = urlparse((url or "").strip())
+    except ValueError:
+        return False
+    if "wroclawguide.com" not in (p.netloc or "").lower():
+        return False
+    path = (p.path or "").lower()
+    if "/events-category/" in path:
+        return True
+    if "event-calendar-wroclaw" in path:
+        return True
+    return False
+
+
 def event_is_excluded(ev: Event) -> bool:
     u_raw = (ev.url or "").strip()
     if not u_raw.lower().startswith("https://"):
         return True
     u = u_raw.lower()
+    if _wroclawguide_listing_hub_url(u_raw):
+        return True
     if _wroclaw_go_wydarzenia_category_landing(u_raw):
         return True
     for frag in _all_url_parts():
