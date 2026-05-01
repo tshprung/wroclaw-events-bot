@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import re
 import unicodedata
+from urllib.parse import urlparse
 
 from .models import Event
 
@@ -53,6 +54,18 @@ _DEFAULT_URL_PARTS: frozenset[str] = frozenset(
         # wroclaw.pl: informational/category hubs (not single events).
         "wroclaw.pl/poradnik-mieszkanca/kategoria/",
         "wroclaw.pl/inwestycje-wroclaw/aktualnosci-inwestycje",
+        # wroclaw.pl: investment / culture / sport index pages (not single events).
+        "wroclaw.pl/inwestycje-wroclaw/inwestycje-",
+        "wroclaw.pl/kultura/aktualnosci",
+        "wroclaw.pl/kultura/stypendia-artystyczne",
+        "wroclaw.pl/kultura/wroclawskie-festiwale",
+        "wroclaw.pl/kultura/miejskie-instytucje-kultury",
+        "wroclaw.pl/kultura/wroclawska-rada-kultury",
+        "wroclaw.pl/sport/aktualnosci-sport-i-rekreacja-wroclaw",
+        "wroclaw.pl/sport/rekreacja-we-wroclawiu",
+        # WroclawGuide: category filters, not single events.
+        "wroclawguide.com/en/events-category/",
+        "wroclawguide.com/events-category/",
         # wroclaw.pl/go and wydarzenia.wroclaw.pl topic hubs (not single events).
         "wroclaw.pl/go/wydarzenia/teatr",
         "wroclaw.pl/go/wydarzenia/muzyka",
@@ -106,11 +119,27 @@ def _all_title_parts() -> frozenset[str]:
     return _DEFAULT_TITLE_PARTS | _extra_from_env("EVENT_EXCLUDE_TITLE_SUBSTR")
 
 
+def _wroclaw_go_wydarzenia_category_landing(url: str) -> bool:
+    """True for /go/wydarzenia/<category> with no /{id}-slug (e.g. …/kino vs …/kino/123-show)."""
+    try:
+        p = urlparse((url or "").strip())
+    except ValueError:
+        return False
+    if "wroclaw.pl" not in (p.netloc or "").lower():
+        return False
+    parts = [x for x in (p.path or "").split("/") if x]
+    if len(parts) != 3:
+        return False
+    return parts[0].lower() == "go" and parts[1].lower() == "wydarzenia"
+
+
 def event_is_excluded(ev: Event) -> bool:
     u_raw = (ev.url or "").strip()
     if not u_raw.lower().startswith("https://"):
         return True
     u = u_raw.lower()
+    if _wroclaw_go_wydarzenia_category_landing(u_raw):
+        return True
     for frag in _all_url_parts():
         if frag in u:
             return True
