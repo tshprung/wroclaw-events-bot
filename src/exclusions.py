@@ -97,6 +97,22 @@ _DEFAULT_TITLE_PARTS: frozenset[str] = frozenset(
     }
 )
 
+# osiedle.wroc.pl only — Rada Osiedla / komisje (formal meetings, not public “events”).
+_OSIEDLE_NON_EVENT_TITLE_PARTS: frozenset[str] = frozenset(
+    {
+        "sesja rady osiedla",
+        "sesja rady dzielnicy",
+        "zebranie rady osiedla",
+        "zebranie komisji",
+        "posiedzenie komisji",
+        "posiedzenie rady osiedla",
+        "nadzwyczajna sesja rady",
+        "komisja rewizyjna",
+        "komisji rewizyjnej",
+        "spotkanie komisji",
+    }
+)
+
 
 def _extra_from_env(var: str) -> frozenset[str]:
     raw = os.environ.get(var, "").strip()
@@ -114,6 +130,12 @@ def _all_venue_parts() -> frozenset[str]:
 
 def _all_title_parts() -> frozenset[str]:
     return _DEFAULT_TITLE_PARTS | _extra_from_env("EVENT_EXCLUDE_TITLE_SUBSTR")
+
+
+def _all_osiedle_title_parts() -> frozenset[str]:
+    return _all_title_parts() | _OSIEDLE_NON_EVENT_TITLE_PARTS | _extra_from_env(
+        "EVENT_EXCLUDE_OSIEDLE_TITLE_SUBSTR"
+    )
 
 
 def _wroclaw_go_wydarzenia_category_landing(url: str) -> bool:
@@ -177,7 +199,7 @@ def event_is_excluded(ev: Event) -> bool:
                 if frag in title_f:
                     return True
         if "osiedle.wroc.pl" in host:
-            for frag in _all_title_parts():
+            for frag in _all_osiedle_title_parts():
                 if frag in title_f:
                     return True
     ven = _fold(ev.venue or "")
