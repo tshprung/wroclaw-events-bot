@@ -6,7 +6,7 @@ import sqlite3
 from dataclasses import asdict
 from datetime import datetime, timedelta, timezone
 
-from .dedupe import _wydarzenia_wroclaw_path_key
+from .dedupe import _wydarzenia_wroclaw_path_key, fingerprint
 from .models import Event
 
 
@@ -60,6 +60,76 @@ CREATE TABLE IF NOT EXISTS runs (
 _META_GO_FP_COLLAPSE = "legacy_go_fingerprint_collapsed_v1"
 _META_KRAJ_FP_COLLAPSE = "legacy_kraj_fingerprint_collapsed_v1"
 _META_WW_FP_COLLAPSE = "legacy_ww_fingerprint_collapsed_v1"
+_META_XSLUG_FP_COLLAPSE = "legacy_xslug_fingerprint_collapsed_v1"
+
+
+def _event_from_storage_row(r: tuple) -> Event:
+    _fp, source_id, title, start_at_s, venue, url, city, raw_date_text, _fst = r
+    st: datetime | None = None
+    if start_at_s:
+        try:
+            st = datetime.fromisoformat(str(start_at_s))
+        except ValueError:
+            st = None
+        if st is not None and st.tzinfo is None:
+            st = st.replace(tzinfo=timezone.utc)
+    return Event(
+        source_id=str(source_id),
+        title=str(title),
+        start_at=st,
+        venue=venue,
+        url=str(url),
+        city=str(city or "Wrocław"),
+        raw_date_text=raw_date_text,
+    )
+
+
+def _collapse_legacy_xslug_fingerprints(conn: sqlite3.Connection) -> None:
+    """Merge title|start|venue rows into xslug:… when URL is WroclawGuide / Hala (same show, one DB row)."""
+    if conn.execute(
+        "SELECT 1 FROM bot_meta WHERE key=?",
+        (_META_XSLUG_FP_COLLAPSE,),
+    ).fetchone():
+        return
+    rows = conn.execute(
+        """
+        SELECT fingerprint, source_id, title, start_at, venue, url, city, raw_date_text, first_seen_at
+        FROM events
+        """
+    ).fetchall()
+    groups: dict[str, list[tuple]] = {}
+    for r in rows:
+        old_fp = r[0]
+        ev = _event_from_storage_row(r)
+        try:
+            new_fp = fingerprint(ev)
+        except Exception:
+            continue
+        if not new_fp.startswith("xslug:") or new_fp == old_fp:
+            continue
+        groups.setdefault(new_fp, []).append(r)
+    for new_fp, members in groups.items():
+        if len(members) == 1 and members[0][0] == new_fp:
+            continue
+        members.sort(key=lambda x: x[8])
+        w = members[0]
+        for r in members:
+            conn.execute("DELETE FROM events WHERE fingerprint=?", (r[0],))
+        conn.execute(
+            """
+            INSERT INTO events
+              (fingerprint, source_id, title, start_at, venue, url, city, raw_date_text, first_seen_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (new_fp, w[1], w[2], w[3], w[4], w[5], w[6], w[7], w[8]),
+        )
+    conn.execute(
+        """
+        INSERT INTO bot_meta (key, value) VALUES (?, ?)
+        ON CONFLICT(key) DO UPDATE SET value = excluded.value
+        """,
+        (_META_XSLUG_FP_COLLAPSE, _now_utc_iso()),
+    )
 
 
 def _collapse_legacy_go_fingerprints(conn: sqlite3.Connection) -> None:
@@ -234,6 +304,7 @@ def connect(db_path: str) -> sqlite3.Connection:
     _collapse_legacy_go_fingerprints(conn)
     _collapse_legacy_kraj_fingerprints(conn)
     _collapse_legacy_ww_fingerprints(conn)
+    _collapse_legacy_xslug_fingerprints(conn)
     conn.commit()
     return conn
 

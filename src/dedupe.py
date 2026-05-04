@@ -350,6 +350,27 @@ def should_skip_cross_source_duplicate(ev: Event, seen: list[Event], local_tz: t
     return False
 
 
+def _cross_listed_city_event_slug(url: str) -> str | None:
+    """Same physical listing often appears on WroclawGuide /events/… and Hala /wydarzenie/… with the same slug."""
+    lp = (url or "").strip().lower()
+    if not lp:
+        return None
+    try:
+        if "wroclawguide.com" in lp and "/events/" in lp:
+            if "events-category" in lp or "event-calendar-wroclaw" in lp:
+                return None
+            m = re.search(r"/(?:en/)?events/([^/?#]+)", lp)
+            if m:
+                return unquote(m.group(1)).strip().rstrip("/").lower()
+        if "halastulecia.pl" in lp and "/wydarzenie/" in lp:
+            m = re.search(r"/wydarzenie/([^/?#]+)", lp)
+            if m:
+                return unquote(m.group(1)).strip().rstrip("/").lower()
+    except Exception:
+        return None
+    return None
+
+
 def fingerprint(ev: Event) -> str:
     # One row per Facebook event permalink; anchor text on search pages is unstable.
     mfb = _FB_EVENT_ID_IN_URL.search(ev.url or "")
@@ -366,6 +387,9 @@ def fingerprint(ev: Event) -> str:
     wwk = _wydarzenia_wroclaw_path_key(ev.url or "")
     if wwk:
         return f"ww:{wwk}"
+    xslug = _cross_listed_city_event_slug(ev.url or "")
+    if xslug:
+        return f"xslug:{xslug}"
     goid = _wroclaw_go_numeric_id(ev.url or "")
     if goid:
         # Numeric id only: date-based keys drift between runs (LD vs anchor, startDate tweaks),

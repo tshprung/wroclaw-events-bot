@@ -4,7 +4,7 @@ import html as html_module
 import json
 import re
 import unicodedata
-from datetime import datetime
+from datetime import datetime, tzinfo
 from typing import Callable
 from urllib.parse import quote, unquote, urljoin, urlparse, urlunparse
 
@@ -918,12 +918,42 @@ def _parse_wroclaw_go_anchor(source_id: str, text: str, url: str) -> Event:
     return Event(source_id=source_id, title=title, start_at=None, venue=venue, url=url, raw_date_text=when_txt)
 
 
+def _merge_wroclawguide_jsonld_duplicates(
+    current: Event,
+    incoming: Event,
+    *,
+    local_tz: tzinfo,
+) -> Event:
+    """Same event URL can appear in several JSON-LD blocks (e.g. date-only midnight vs real start time)."""
+    ca, ib = current.start_at, incoming.start_at
+    if ca is None:
+        return incoming
+    if ib is None:
+        return current
+
+    def _is_local_midnight(t: datetime) -> bool:
+        lt = t.astimezone(local_tz)
+        return lt.hour == 0 and lt.minute == 0
+
+    da, db = ca.astimezone(local_tz).date(), ib.astimezone(local_tz).date()
+    if da == db:
+        if _is_local_midnight(ib) and not _is_local_midnight(ca):
+            return current
+        if _is_local_midnight(ca) and not _is_local_midnight(ib):
+            return incoming
+
+    if len(incoming.title or "") > len(current.title or "") + 2:
+        return incoming
+    if not (current.venue or "").strip() and (incoming.venue or "").strip():
+        return incoming
+    return current if ca <= ib else incoming
+
+
 def parse_wroclawguide_calendar(source: Source, html: str) -> list[Event]:
     # The calendar HTML embeds many standalone JSON-LD Event blocks (startDate + url). Generic
     # link extraction has no dates, so undated rows bypass EVENT_WINDOW_DAYS.
-    tzinfo = dttz.gettz("Europe/Warsaw") or dttz.tzlocal()
-    out: list[Event] = []
-    seen: set[str] = set()
+    local_tz = dttz.gettz("Europe/Warsaw") or dttz.tzlocal()
+    by_url: dict[str, Event] = {}
     for script in soup(html).select('script[type="application/ld+json"]'):
         raw = (script.string or "").strip()
         if not raw:
@@ -942,7 +972,7 @@ def parse_wroclawguide_calendar(source: Source, html: str) -> list[Event]:
             is_ev = typ == "Event" or (isinstance(typ, list) and "Event" in typ)
             if not is_ev:
                 continue
-            name = _clean(item.get("name") or "")
+            name = _clean(html_module.unescape(_clean(item.get("name") or "")))
             sd = item.get("startDate")
             url_u = (item.get("url") or "").strip()
             if not name or not sd or not url_u:
@@ -957,27 +987,28 @@ def parse_wroclawguide_calendar(source: Source, html: str) -> list[Event]:
             except (ValueError, TypeError):
                 continue
             if st.tzinfo is None:
-                st = st.replace(tzinfo=tzinfo)
+                st = st.replace(tzinfo=local_tz)
             else:
-                st = st.astimezone(tzinfo)
+                st = st.astimezone(local_tz)
             loc = item.get("location")
             venue = None
             if isinstance(loc, dict):
                 venue = _clean(loc.get("name") or "") or None
             clean = url_u.split("#")[0].rstrip("/")
-            if clean in seen:
-                continue
-            seen.add(clean)
-            out.append(
-                Event(
-                    source_id=source.id,
-                    title=name,
-                    start_at=st,
-                    venue=venue,
-                    url=clean,
-                    raw_date_text=None,
-                )
+            ev = Event(
+                source_id=source.id,
+                title=name,
+                start_at=st,
+                venue=venue,
+                url=clean,
+                raw_date_text=None,
             )
+            prev = by_url.get(clean)
+            if prev is None:
+                by_url[clean] = ev
+            else:
+                by_url[clean] = _merge_wroclawguide_jsonld_duplicates(prev, ev, local_tz=local_tz)
+    out = list(by_url.values())
     if out:
         return out
     lim = source.link_limit if source.link_limit is not None else 300
