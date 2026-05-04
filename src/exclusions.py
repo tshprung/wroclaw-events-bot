@@ -110,6 +110,24 @@ _OSIEDLE_NON_EVENT_TITLE_PARTS: frozenset[str] = frozenset(
         "komisja rewizyjna",
         "komisji rewizyjnej",
         "spotkanie komisji",
+        # Urban-planning consultations / map info (not neighbourhood “events”).
+        "konsultacje planu ogolnego wroclawia",
+        "konsultacje planu",
+        "plan miejscowy",
+        "na planie ogolnym",
+        "plan ogolnego wroclawia",
+        "twoja okolica na planie",
+    }
+)
+
+# krajownik.pl only — open calls / recruitment pages listed among events.
+_KRAJOWNIK_NON_EVENT_TITLE_PARTS: frozenset[str] = frozenset(
+    {
+        "otwarty nabor",
+        "otwarty nabor do projektu",
+        "nabor do projektu",
+        "naboru do projektu",
+        "rekrutacja do projektu",
     }
 )
 
@@ -136,6 +154,10 @@ def _all_osiedle_title_parts() -> frozenset[str]:
     return _all_title_parts() | _OSIEDLE_NON_EVENT_TITLE_PARTS | _extra_from_env(
         "EVENT_EXCLUDE_OSIEDLE_TITLE_SUBSTR"
     )
+
+
+def _all_krajownik_title_parts() -> frozenset[str]:
+    return _KRAJOWNIK_NON_EVENT_TITLE_PARTS | _extra_from_env("EVENT_EXCLUDE_KRAJOWNIK_TITLE_SUBSTR")
 
 
 def _wroclaw_go_wydarzenia_category_landing(url: str) -> bool:
@@ -200,6 +222,10 @@ def event_is_excluded(ev: Event) -> bool:
                     return True
         if "osiedle.wroc.pl" in host:
             for frag in _all_osiedle_title_parts():
+                if frag in title_f:
+                    return True
+        if "krajownik.pl" in host:
+            for frag in _all_krajownik_title_parts():
                 if frag in title_f:
                     return True
     ven = _fold(ev.venue or "")

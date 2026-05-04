@@ -919,9 +919,69 @@ def _parse_wroclaw_go_anchor(source_id: str, text: str, url: str) -> Event:
 
 
 def parse_wroclawguide_calendar(source: Source, html: str) -> list[Event]:
-    # The calendar page includes repeating blocks: day/month + time + venue + title.
-    # We keep it simple by capturing heading links as event URLs, and embed time/venue into raw_date_text when possible.
-    return parse_generic_links(source, html)
+    # The calendar HTML embeds many standalone JSON-LD Event blocks (startDate + url). Generic
+    # link extraction has no dates, so undated rows bypass EVENT_WINDOW_DAYS.
+    tzinfo = dttz.gettz("Europe/Warsaw") or dttz.tzlocal()
+    out: list[Event] = []
+    seen: set[str] = set()
+    for script in soup(html).select('script[type="application/ld+json"]'):
+        raw = (script.string or "").strip()
+        if not raw:
+            continue
+        try:
+            data = json.loads(raw)
+        except json.JSONDecodeError:
+            continue
+        objs = data.get("@graph") if isinstance(data, dict) and "@graph" in data else None
+        if objs is None:
+            objs = data if isinstance(data, list) else [data]
+        for item in objs:
+            if not isinstance(item, dict):
+                continue
+            typ = item.get("@type")
+            is_ev = typ == "Event" or (isinstance(typ, list) and "Event" in typ)
+            if not is_ev:
+                continue
+            name = _clean(item.get("name") or "")
+            sd = item.get("startDate")
+            url_u = (item.get("url") or "").strip()
+            if not name or not sd or not url_u:
+                continue
+            lu = url_u.lower()
+            if "wroclawguide.com" not in lu or "/events/" not in lu:
+                continue
+            if "/events-category/" in lu or "event-calendar-wroclaw" in lu:
+                continue
+            try:
+                st = dtparser.isoparse(str(sd).replace("Z", "+00:00"))
+            except (ValueError, TypeError):
+                continue
+            if st.tzinfo is None:
+                st = st.replace(tzinfo=tzinfo)
+            else:
+                st = st.astimezone(tzinfo)
+            loc = item.get("location")
+            venue = None
+            if isinstance(loc, dict):
+                venue = _clean(loc.get("name") or "") or None
+            clean = url_u.split("#")[0].rstrip("/")
+            if clean in seen:
+                continue
+            seen.add(clean)
+            out.append(
+                Event(
+                    source_id=source.id,
+                    title=name,
+                    start_at=st,
+                    venue=venue,
+                    url=clean,
+                    raw_date_text=None,
+                )
+            )
+    if out:
+        return out
+    lim = source.link_limit if source.link_limit is not None else 300
+    return parse_generic_links(source, html, link_limit=lim)
 
 
 def parse_meetup_find(source: Source, html: str) -> list[Event]:
