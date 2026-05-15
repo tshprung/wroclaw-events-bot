@@ -467,3 +467,79 @@ def list_source_health_alerts(conn: sqlite3.Connection) -> list[dict]:
         )
     return out
 
+
+def get_bot_meta_value(conn: sqlite3.Connection, key: str) -> str | None:
+    row = conn.execute("SELECT value FROM bot_meta WHERE key = ?", (key,)).fetchone()
+    if not row:
+        return None
+    v = str(row[0] or "").strip()
+    return v or None
+
+
+def set_bot_meta_value(conn: sqlite3.Connection, key: str, value: str) -> None:
+    conn.execute(
+        """
+        INSERT INTO bot_meta (key, value) VALUES (?, ?)
+        ON CONFLICT(key) DO UPDATE SET value = excluded.value
+        """,
+        (key, value),
+    )
+
+
+def list_events_for_upcoming_digest(
+    conn: sqlite3.Connection,
+    *,
+    now_utc: datetime,
+    end_utc: datetime,
+    seen_since_utc: datetime,
+    limit_scheduled: int,
+    limit_recent_unknown: int,
+) -> list[Event]:
+    if now_utc.tzinfo is None:
+        now_utc = now_utc.replace(tzinfo=timezone.utc)
+    else:
+        now_utc = now_utc.astimezone(timezone.utc)
+    if end_utc.tzinfo is None:
+        end_utc = end_utc.replace(tzinfo=timezone.utc)
+    else:
+        end_utc = end_utc.astimezone(timezone.utc)
+    if seen_since_utc.tzinfo is None:
+        seen_since_utc = seen_since_utc.replace(tzinfo=timezone.utc)
+    else:
+        seen_since_utc = seen_since_utc.astimezone(timezone.utc)
+
+    now_iso = now_utc.isoformat()
+    end_iso = end_utc.isoformat()
+    seen_since_iso = seen_since_utc.isoformat()
+
+    scheduled = conn.execute(
+        """
+        SELECT fingerprint, source_id, title, start_at, venue, url, city, raw_date_text, first_seen_at
+        FROM events
+        WHERE start_at IS NOT NULL
+          AND start_at >= ?
+          AND start_at <= ?
+        ORDER BY start_at ASC
+        LIMIT ?
+        """,
+        (now_iso, end_iso, int(limit_scheduled)),
+    ).fetchall()
+
+    recent_unknown = conn.execute(
+        """
+        SELECT fingerprint, source_id, title, start_at, venue, url, city, raw_date_text, first_seen_at
+        FROM events
+        WHERE start_at IS NULL
+          AND first_seen_at >= ?
+        ORDER BY first_seen_at DESC
+        LIMIT ?
+        """,
+        (seen_since_iso, int(limit_recent_unknown)),
+    ).fetchall()
+
+    out: list[Event] = []
+    for r in scheduled:
+        out.append(_event_from_storage_row(r))
+    for r in recent_unknown:
+        out.append(_event_from_storage_row(r))
+    return out

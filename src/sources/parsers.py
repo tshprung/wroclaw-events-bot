@@ -611,6 +611,36 @@ def parse_pik(source: Source, html: str) -> list[Event]:
     return out
 
 
+_KRAJOWNIK_WROCLAW_DETAIL = re.compile(r"^/wroclaw/wydarzenia/[^/?#]+-\d+/?$", re.I)
+
+
+def parse_krajownik_wroclaw_wydarzenia(source: Source, html: str) -> list[Event]:
+    links = extract_links(
+        source.url,
+        html,
+        selector='a[href*="/wroclaw/wydarzenia/"]',
+        limit=650,
+        allow_empty_text=True,
+    )
+    out: list[Event] = []
+    seen: set[str] = set()
+    for text, url in links:
+        p = urlparse(url)
+        host = (p.netloc or "").lower()
+        if "krajownik.pl" not in host:
+            continue
+        path = unquote(p.path or "")
+        if not _KRAJOWNIK_WROCLAW_DETAIL.match(path):
+            continue
+        clean_url = f"{p.scheme}://{p.netloc}{path}".rstrip("/")
+        if clean_url in seen:
+            continue
+        seen.add(clean_url)
+        title = _clean(text) if text and _clean(text) else "Wydarzenie (Krajownik)"
+        out.append(Event(source_id=source.id, title=title, start_at=None, venue=None, url=clean_url))
+    return out
+
+
 def parse_generic_links(source: Source, html: str, *, link_limit: int | None = None) -> list[Event]:
     # Generic fallback: create low-fidelity “events” from prominent links.
     # This is meant as scaffolding; source-specific parsers should replace it.
@@ -1352,6 +1382,7 @@ def parser_for_kind(kind: str) -> Callable[[Source, str], list[Event]]:
         "generic_links": parse_generic_links,
         "facebook_event_search": parse_facebook_event_search,
         "wroclaw_go": parse_wroclaw_go,
+        "krajownik_wroclaw_wydarzenia": parse_krajownik_wroclaw_wydarzenia,
         "hala_stulecia": parse_hala_stulecia,
         "tarczynski_arena": parse_tarczynski_arena,
         "nfm_repertuar": parse_nfm_repertuar,
@@ -1368,4 +1399,3 @@ def parser_for_kind(kind: str) -> Callable[[Source, str], list[Event]]:
         "nowiny_olesnickie_wydarzenia": parse_nowiny_olesnickie_wydarzenia,
         "wroclaw_travel_calendar": parse_generic_links,
     }.get(kind, parse_generic_links)
-

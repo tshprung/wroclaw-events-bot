@@ -5,7 +5,7 @@ import os
 import pathlib
 import sqlite3
 import uuid
-from datetime import datetime, time as dt_time
+from datetime import datetime, time as dt_time, timedelta, timezone
 
 import requests
 import yaml
@@ -28,7 +28,14 @@ from .dedupe import (
 from .exclusions import filter_out_excluded_events
 from .health import should_admin_alert
 from .models import Event, Source
-from .storage import connect, insert_event_if_new, list_source_health_alerts
+from .storage import (
+    connect,
+    get_bot_meta_value,
+    insert_event_if_new,
+    list_events_for_upcoming_digest,
+    list_source_health_alerts,
+    set_bot_meta_value,
+)
 from .storage import maybe_delete_past_events, upsert_source_health
 from .telegram import TelegramClient, format_event_message
 from .sources.common import extract_social_image_url, fetch_facebook_event_search, fetch_url
@@ -172,6 +179,37 @@ def _wroclaw_go_page_url(base: str, page: int) -> str:
     return f"{base}{joiner}strona={page}"
 
 
+def _krajownik_page_url(base: str, page: int) -> str:
+    if page <= 1:
+        return base
+    b = base.rstrip("/")
+    return f"{b}/page/{page}/"
+
+
+def _min_event_notice_minutes() -> int:
+    raw = (os.environ.get("MIN_EVENT_NOTICE_MINUTES") or "").strip()
+    if not raw:
+        return 0
+    try:
+        v = int(raw)
+    except ValueError:
+        return 0
+    return max(0, min(v, 7 * 24 * 60))
+
+
+def _should_skip_due_to_min_notice(ev: Event, now_local: datetime) -> bool:
+    notice_min = _min_event_notice_minutes()
+    if notice_min <= 0:
+        return False
+    r = resolve_when(ev, now_local)
+    if r is None or r.tm is None:
+        return False
+    ev_start = datetime.combine(r.day, r.tm, tzinfo=now_local.tzinfo)
+    delta_min = int((ev_start - now_local).total_seconds() // 60)
+    return delta_min < notice_min
+
+
+
 def _dedupe_events_by_url(events: list[Event]) -> list[Event]:
     seen: set[str] = set()
     out: list[Event] = []
@@ -181,6 +219,109 @@ def _dedupe_events_by_url(events: list[Event]) -> list[Event]:
         seen.add(e.url)
         out.append(e)
     return out
+
+
+def _maybe_send_upcoming_digest(
+    *,
+    conn: sqlite3.Connection,
+    now_local: datetime,
+    window_days: int,
+    settings,
+    telegram: TelegramClient | None,
+    sources: list[Source],
+) -> None:
+    raw_h = (os.environ.get("UPCOMING_DIGEST_HOUR_LOCAL") or "").strip()
+    if not raw_h:
+        return
+    try:
+        hour = int(raw_h)
+    except ValueError:
+        return
+    if not (0 <= hour <= 23):
+        return
+    if now_local.hour != hour:
+        return
+
+    today_key = now_local.date().isoformat()
+    meta_key = "upcoming_digest_last_day_local"
+    last = get_bot_meta_value(conn, meta_key)
+    if last == today_key:
+        return
+
+    max_lines = int(os.environ.get("UPCOMING_DIGEST_MAX", "35"))
+    max_lines = max(1, min(max_lines, 120))
+
+    now_utc = datetime.now(timezone.utc)
+    end_local = now_local + timedelta(days=window_days)
+    end_utc = end_local.astimezone(timezone.utc)
+    seen_since_days = int(os.environ.get("UPCOMING_DIGEST_INCLUDE_UNKNOWN_SEEN_DAYS", "14"))
+    seen_since_days = max(1, min(seen_since_days, 60))
+    seen_since_utc = now_utc - timedelta(days=seen_since_days)
+
+    candidates = list_events_for_upcoming_digest(
+        conn,
+        now_utc=now_utc,
+        end_utc=end_utc,
+        seen_since_utc=seen_since_utc,
+        limit_scheduled=max(200, max_lines * 6),
+        limit_recent_unknown=800,
+    )
+
+    def _in_window(ev: Event) -> tuple[datetime | None, Event] | None:
+        if _should_skip_due_to_min_notice(ev, now_local):
+            return None
+        r = resolve_when(ev, now_local)
+        if r is None:
+            return None
+        dtv: datetime
+        if r.tm is None:
+            dtv = datetime.combine(r.day, dt_time.min, tzinfo=now_local.tzinfo)
+        else:
+            dtv = datetime.combine(r.day, r.tm, tzinfo=now_local.tzinfo)
+        if not (now_local <= dtv <= end_local):
+            return None
+        return dtv, ev
+
+    enriched: list[tuple[datetime, Event]] = []
+    seen_sig: set[str] = set()
+    for ev in candidates:
+        hit = _in_window(ev)
+        if hit is None:
+            continue
+        dtv, ev2 = hit
+        sig = fingerprint(ev2)
+        if sig in seen_sig:
+            continue
+        seen_sig.add(sig)
+        enriched.append((dtv, ev2))
+
+    if not enriched:
+        set_bot_meta_value(conn, meta_key, today_key)
+        conn.commit()
+        return
+
+    enriched.sort(key=lambda x: x[0])
+    sliced = enriched[:max_lines]
+    lines = [
+        format_event_message(
+            title=ev.title,
+            when=format_event_when_display(ev, now_local.tzinfo),
+            venue=ev.venue,
+            url=ev.url,
+        )
+        for _dtv, ev in sliced
+    ]
+    msg = f"Upcoming events (next {window_days} days): {len(lines)}\n\n" + "\n\n".join(lines)
+
+    if settings.dry_run:
+        log.info("[DRY_RUN] Upcoming digest:\n%s", _short(msg, 2000))
+    else:
+        if telegram is None:
+            raise RuntimeError("Telegram client missing (dry_run=false).")
+        telegram.send_message(settings.telegram_channel_id, msg)
+
+    set_bot_meta_value(conn, meta_key, today_key)
+    conn.commit()
 
 
 def main() -> int:
@@ -287,6 +428,47 @@ def main() -> int:
                         continue
                     events_raw = _dedupe_events_by_url(events_raw)
                     events_raw = collapse_wroclaw_go_twin_listings(events_raw, tzinfo)
+                elif src.kind == "krajownik_wroclaw_wydarzenia":
+                    max_pages = max(1, min(30, int(os.environ.get("KRAJOWNIK_MAX_PAGES", "12"))))
+                    failed_first = False
+                    seen_urls: set[str] = set()
+                    for page in range(1, max_pages + 1):
+                        page_url = _krajownik_page_url(src.url, page)
+                        try:
+                            res = fetch_url(session, page_url, verify=src.verify_ssl)
+                        except requests.exceptions.RequestException:
+                            if page == 1:
+                                raise
+                            log.info("[%s] stopped pages at %d (request error after first page)", src.id, page)
+                            break
+                        http_for_health = res.status_code
+                        if res.status_code >= 400:
+                            if page == 1:
+                                upsert_source_health(
+                                    conn,
+                                    src.id,
+                                    src.url,
+                                    ok=False,
+                                    http_status=res.status_code,
+                                    error_kind="http_error",
+                                    error_detail=f"HTTP {res.status_code}",
+                                )
+                                total_fail += 1
+                                conn.commit()
+                                log.warning("[%s] HTTP %s", src.id, res.status_code)
+                                failed_first = True
+                            break
+                        batch = parser(src, res.text)
+                        if not batch:
+                            break
+                        fresh = [e for e in batch if e.url not in seen_urls]
+                        if not fresh:
+                            break
+                        for e in fresh:
+                            seen_urls.add(e.url)
+                        events_raw.extend(fresh)
+                    if failed_first:
+                        continue
                 else:
                     if src.kind == "facebook_event_search":
                         res = fetch_facebook_event_search(session, src.url, verify=src.verify_ssl)
@@ -322,6 +504,26 @@ def main() -> int:
                 if n_excl:
                     log.info("[%s] exclusions: dropped %d", src.id, n_excl)
                 events = collapse_wroclaw_go_same_detail_url(events, tzinfo)
+
+                lead_today = 0
+                lead_future = 0
+                lead_undated = 0
+                for e in events:
+                    r = resolve_when(e, now_local)
+                    if r is None:
+                        lead_undated += 1
+                    elif r.day == now_local.date():
+                        lead_today += 1
+                    else:
+                        lead_future += 1
+                if lead_today or lead_future or lead_undated:
+                    log.info(
+                        "[%s] lead-time: today=%d future=%d undated=%d",
+                        src.id,
+                        lead_today,
+                        lead_future,
+                        lead_undated,
+                    )
                 if (
                     src.kind == "wroclaw_go"
                     and events_raw
@@ -356,6 +558,15 @@ def main() -> int:
                         cross_run_seen.append(ev)
                         new_events += 1
                         new_for_source += 1
+                        if _should_skip_due_to_min_notice(ev, now_local):
+                            log.info(
+                                "[%s] skip near-term notify (notice=%dm) url=%s title=%r",
+                                src.id,
+                                _min_event_notice_minutes(),
+                                ev.url,
+                                _short(ev.title, 120),
+                            )
+                            continue
                         msg = format_event_message(
                             title=ev.title,
                             when=format_event_when_display(ev, tzinfo),
@@ -417,6 +628,15 @@ def main() -> int:
         # Post after sorting by (date,time) across all sources.
         if post_queue:
             post_queue.sort(key=_queue_sort_key)
+
+        _maybe_send_upcoming_digest(
+            conn=conn,
+            now_local=now_local,
+            window_days=window_days,
+            settings=settings,
+            telegram=telegram,
+            sources=sources,
+        )
 
         if post_mode == "digest" and post_queue:
             sliced = post_queue[:max_posts]
@@ -535,4 +755,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

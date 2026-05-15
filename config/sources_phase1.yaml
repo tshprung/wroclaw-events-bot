@@ -100,7 +100,7 @@ sources:
   - id: krajownik_wroclaw_wydarzenia
     name: Krajownik — Wrocław / wydarzenia
     url: https://krajownik.pl/wroclaw/wydarzenia/
-    kind: generic_links
+    kind: krajownik_wroclaw_wydarzenia
     link_limit: 300
     enabled: true
 
