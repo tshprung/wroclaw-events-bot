@@ -23,6 +23,71 @@ _PL_DMY_IN_TITLE = re.compile(
     r"\b(\d{1,2})\s+([a-zA-ZąćęłńóśźżĄĆĘŁŃÓŚŹŻ]+)\s+(\d{4})\b",
     re.UNICODE,
 )
+_TITLE_TOKEN_RE = re.compile(r"\d+|[a-zA-ZąćęłńóśźżĄĆĘŁŃÓŚŹŻ]+", re.UNICODE)
+
+
+def _fold(s: str) -> str:
+    s = unicodedata.normalize("NFKD", (s or "").casefold())
+    return "".join(c for c in s if not unicodedata.combining(c))
+
+
+_TITLE_STOP: frozenset[str] = frozenset(
+    {
+        "wroclaw",
+        "wroclawiu",
+        "wroclove",
+        "wydarzenie",
+        "wydarzenia",
+        "event",
+        "events",
+        "festival",
+        "festiwal",
+        "international",
+        "miedzynarodowy",
+        "poetry",
+        "poezja",
+        "poezji",
+        "literatura",
+        "multiple",
+        "locations",
+        "rozne",
+        "lokalizacje",
+        "program",
+        "wg",
+        "dnia",
+        "od",
+        "godz",
+        "godzina",
+        "godziny",
+        "we",
+        "w",
+        "na",
+        "in",
+        "en",
+        "pl",
+        "the",
+        "and",
+        "of",
+    }
+)
+
+
+def _signature_tokens(title: str) -> set[str]:
+    toks: set[str] = set()
+    for m in _TITLE_TOKEN_RE.finditer(title or ""):
+        t = _fold(m.group(0))
+        if not t:
+            continue
+        if t in _TITLE_STOP:
+            continue
+        if t.isdigit():
+            if len(t) >= 2:
+                toks.add(t)
+            continue
+        if len(t) < 5:
+            continue
+        toks.add(t)
+    return toks
 
 
 def _fold_month_token(s: str) -> str:
@@ -300,11 +365,13 @@ def is_same_show_cross_source(a: Event, b: Event) -> bool:
     par_ls = partial_ratio(lo, sh)
     par_sl = partial_ratio(sh, lo)
     best_par = max(par_ls, par_sl)
-    # Allow shared rare tokens ("1991", show name) where token_set_ratio stays ~mid.
-    if tsr < 44 and best_par < 62:
-        return False
-    if tsr < 38 and best_par < 68:
-        return False
+    sa, sb = _signature_tokens(a.title), _signature_tokens(b.title)
+    strong_common = {t for t in (sa & sb) if t.isalpha() and len(t) >= 6}
+    if not strong_common:
+        if tsr < 44 and best_par < 62:
+            return False
+        if tsr < 38 and best_par < 68:
+            return False
     va, vb = _norm(a.venue or ""), _norm(b.venue or "")
     if va and vb:
         if token_set_ratio(va, vb) < 58:
@@ -321,7 +388,7 @@ def is_same_show_cross_source(a: Event, b: Event) -> bool:
                 return False
         else:
             # No venue on either side (common for generic scrapers): need stronger title match.
-            if tsr < 44 and best_par < 68:
+            if not strong_common and tsr < 44 and best_par < 68:
                 return False
     return True
 
@@ -409,4 +476,3 @@ def is_probably_same(a: Event, b: Event) -> bool:
         if token_set_ratio(_norm(a.venue or ""), _norm(b.venue or "")) < 80:
             return False
     return token_set_ratio(_norm(a.title), _norm(b.title)) >= 88
-

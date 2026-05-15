@@ -103,9 +103,11 @@ _OSIEDLE_NON_EVENT_TITLE_PARTS: frozenset[str] = frozenset(
         "sesja rady osiedla",
         "sesja rady dzielnicy",
         "zebranie rady osiedla",
+        "zebranie zarzadu osiedla",
         "zebranie komisji",
         "posiedzenie komisji",
         "posiedzenie rady osiedla",
+        "posiedzenie zarzadu osiedla",
         "nadzwyczajna sesja rady",
         "komisja rewizyjna",
         "komisji rewizyjnej",
@@ -190,12 +192,62 @@ def _wroclawguide_listing_hub_url(url: str) -> bool:
     return False
 
 
+_WROCLAW_PL_NON_EVENT_PATHS: frozenset[str] = frozenset(
+    {
+        "/dla-mieszkanca/wroclaw-na-weekend-zestawienia",
+        "/dla-mieszkanca/konkursy-portalu-wwwwroclawpl",
+        "/dla-mieszkanca/wroclaw-sie-zmienia-rozlicz-pit-we-wroclawiu",
+        "/dla-mieszkanca/dla-niepelnosprawnych",
+        "/dla-mieszkanca/wiadomosci-z-regionu",
+    }
+)
+
+
+def _wroclaw_pl_specific_hub_url(url: str) -> bool:
+    try:
+        p = urlparse((url or "").strip())
+    except ValueError:
+        return False
+    if "wroclaw.pl" not in (p.netloc or "").lower():
+        return False
+    path = (p.path or "").strip().rstrip("/").lower()
+    return path in _WROCLAW_PL_NON_EVENT_PATHS
+
+
+def _hydropolis_tag_url(url: str) -> bool:
+    try:
+        p = urlparse((url or "").strip())
+    except ValueError:
+        return False
+    if "hydropolis.pl" not in (p.netloc or "").lower():
+        return False
+    path = (p.path or "").lower()
+    return path.startswith("/tag/")
+
+
+def _wroclaw_go_zestawienia_url(url: str) -> bool:
+    try:
+        p = urlparse((url or "").strip())
+    except ValueError:
+        return False
+    if "wroclaw.pl" not in (p.netloc or "").lower():
+        return False
+    path = (p.path or "").lower()
+    return "/go/zestawienia/" in path
+
+
 def event_is_excluded(ev: Event) -> bool:
     u_raw = (ev.url or "").strip()
     if not u_raw.lower().startswith("https://"):
         return True
     u = u_raw.lower()
+    if _hydropolis_tag_url(u_raw):
+        return True
     if _wroclawguide_listing_hub_url(u_raw):
+        return True
+    if _wroclaw_pl_specific_hub_url(u_raw):
+        return True
+    if _wroclaw_go_zestawienia_url(u_raw):
         return True
     if _wroclaw_go_wydarzenia_category_landing(u_raw):
         return True
