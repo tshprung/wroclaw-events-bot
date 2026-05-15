@@ -179,11 +179,8 @@ def _wroclaw_go_page_url(base: str, page: int) -> str:
     return f"{base}{joiner}strona={page}"
 
 
-def _krajownik_page_url(base: str, page: int) -> str:
-    if page <= 1:
-        return base
-    b = base.rstrip("/")
-    return f"{b}/page/{page}/"
+def _krajownik_day_query_url(*, city_slug: str, day_iso: str) -> str:
+    return f"https://krajownik.pl/wydarzenia?citySlug={city_slug}&dateFrom={day_iso}&dateTo={day_iso}"
 
 
 def _min_event_notice_minutes() -> int:
@@ -429,21 +426,23 @@ def main() -> int:
                     events_raw = _dedupe_events_by_url(events_raw)
                     events_raw = collapse_wroclaw_go_twin_listings(events_raw, tzinfo)
                 elif src.kind == "krajownik_wroclaw_wydarzenia":
-                    max_pages = max(1, min(30, int(os.environ.get("KRAJOWNIK_MAX_PAGES", "12"))))
                     failed_first = False
                     seen_urls: set[str] = set()
-                    for page in range(1, max_pages + 1):
-                        page_url = _krajownik_page_url(src.url, page)
+                    city_slug = "wroclaw"
+                    days = max(1, int(window_days) + 1)
+                    for delta in range(days):
+                        day_iso = (now_local + timedelta(days=delta)).date().isoformat()
+                        page_url = _krajownik_day_query_url(city_slug=city_slug, day_iso=day_iso)
                         try:
                             res = fetch_url(session, page_url, verify=src.verify_ssl)
                         except requests.exceptions.RequestException:
-                            if page == 1:
+                            if delta == 0:
                                 raise
-                            log.info("[%s] stopped pages at %d (request error after first page)", src.id, page)
-                            break
+                            log.info("[%s] skipped day=%s (request error)", src.id, day_iso)
+                            continue
                         http_for_health = res.status_code
                         if res.status_code >= 400:
-                            if page == 1:
+                            if delta == 0:
                                 upsert_source_health(
                                     conn,
                                     src.id,
@@ -457,13 +456,13 @@ def main() -> int:
                                 conn.commit()
                                 log.warning("[%s] HTTP %s", src.id, res.status_code)
                                 failed_first = True
-                            break
+                            continue
                         batch = parser(src, res.text)
                         if not batch:
-                            break
+                            continue
                         fresh = [e for e in batch if e.url not in seen_urls]
                         if not fresh:
-                            break
+                            continue
                         for e in fresh:
                             seen_urls.add(e.url)
                         events_raw.extend(fresh)

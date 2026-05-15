@@ -615,6 +615,14 @@ _KRAJOWNIK_WROCLAW_DETAIL = re.compile(r"^/wroclaw/wydarzenia/[^/?#]+-\d+/?$", r
 
 
 def parse_krajownik_wroclaw_wydarzenia(source: Source, html: str) -> list[Event]:
+    def _looks_like_when(text: str) -> bool:
+        t = _clean(text)
+        if not t:
+            return False
+        if not re.search(r"\b\d{1,2}\s+[a-zA-ZąćęłńóśźżĄĆĘŁŃÓŚŹŻ]+\s+\d{4}\b", t, re.UNICODE):
+            return False
+        return True
+
     links = extract_links(
         source.url,
         html,
@@ -622,8 +630,7 @@ def parse_krajownik_wroclaw_wydarzenia(source: Source, html: str) -> list[Event]
         limit=650,
         allow_empty_text=True,
     )
-    out: list[Event] = []
-    seen: set[str] = set()
+    by_url: dict[str, dict[str, str]] = {}
     for text, url in links:
         p = urlparse(url)
         host = (p.netloc or "").lower()
@@ -633,11 +640,41 @@ def parse_krajownik_wroclaw_wydarzenia(source: Source, html: str) -> list[Event]
         if not _KRAJOWNIK_WROCLAW_DETAIL.match(path):
             continue
         clean_url = f"{p.scheme}://{p.netloc}{path}".rstrip("/")
-        if clean_url in seen:
+        t = _clean(text)
+        if not t:
             continue
-        seen.add(clean_url)
-        title = _clean(text) if text and _clean(text) else "Wydarzenie (Krajownik)"
-        out.append(Event(source_id=source.id, title=title, start_at=None, venue=None, url=clean_url))
+        rec = by_url.setdefault(clean_url, {})
+        low = t.casefold()
+        if low == "wrocław" or low == "wroclaw":
+            continue
+        if _looks_like_when(t):
+            prev = rec.get("when") or ""
+            if len(t) > len(prev):
+                rec["when"] = t
+            continue
+        prev_title = rec.get("title") or ""
+        if len(t) > len(prev_title):
+            rec["title"] = t
+        prev_venue = rec.get("venue") or ""
+        if len(t) >= 6 and t != rec.get("title", ""):
+            if any(x in low for x in ("ul.", "ulica", "plac", "rynek", "bulwar", "strefa", "centrum")) or any(
+                ch.isdigit() for ch in t
+            ):
+                if len(t) > len(prev_venue):
+                    rec["venue"] = t
+
+    out: list[Event] = []
+    for u, rec in by_url.items():
+        out.append(
+            Event(
+                source_id=source.id,
+                title=rec.get("title") or "Wydarzenie (Krajownik)",
+                start_at=None,
+                venue=rec.get("venue") or None,
+                url=u,
+                raw_date_text=rec.get("when") or None,
+            )
+        )
     return out
 
 
