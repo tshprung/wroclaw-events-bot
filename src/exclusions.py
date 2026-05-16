@@ -71,6 +71,7 @@ _DEFAULT_URL_PARTS: frozenset[str] = frozenset(
         # Teatr Capitol: ticket-sale blog posts and memorial / news pages (not dated shows).
         "teatr-capitol.pl/rozpoczynamy-sprzedaz-biletow",
         "teatr-capitol.pl/pozegnanie-",
+        "7407-noc-muzeow-2026",
     }
 )
 
@@ -273,6 +274,8 @@ def event_is_excluded(ev: Event) -> bool:
                 if frag in title_f:
                     return True
         if "osiedle.wroc.pl" in host:
+            if re.fullmatch(r"noc muzeow(?:\s+\d{4})?", title_f):
+                return True
             for frag in _all_osiedle_title_parts():
                 if frag in title_f:
                     return True
