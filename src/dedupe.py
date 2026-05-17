@@ -31,6 +31,15 @@ def _fold(s: str) -> str:
     return "".join(c for c in s if not unicodedata.combining(c))
 
 
+def _norm_match(s: str) -> str:
+    s = _fold(s)
+    s = _SPACE_RE.sub(" ", s).strip()
+    if not s:
+        return ""
+    s = re.sub(r"\bjoga\b", "yoga", s)
+    return s
+
+
 _TITLE_STOP: frozenset[str] = frozenset(
     {
         "wroclaw",
@@ -83,6 +92,9 @@ def _signature_tokens(title: str) -> set[str]:
         if t.isdigit():
             if len(t) >= 2:
                 toks.add(t)
+            continue
+        if t in ("yoga", "joga"):
+            toks.add("yoga")
             continue
         if len(t) < 5:
             continue
@@ -355,7 +367,7 @@ def collapse_wroclaw_go_twin_listings(events: list[Event], local_tz: tzinfo) -> 
 
 def is_same_show_cross_source(a: Event, b: Event) -> bool:
     """Match krajownik long cards to short wydarzenia.wroclaw.pl / go.wroclaw titles, same calendar day."""
-    ta, tb = _norm(a.title), _norm(b.title)
+    ta, tb = _norm_match(a.title), _norm_match(b.title)
     if not ta or not tb:
         return False
     lo, sh = (ta, tb) if len(ta) >= len(tb) else (tb, ta)
@@ -372,7 +384,7 @@ def is_same_show_cross_source(a: Event, b: Event) -> bool:
             return False
         if tsr < 38 and best_par < 68:
             return False
-    va, vb = _norm(a.venue or ""), _norm(b.venue or "")
+    va, vb = _norm_match(a.venue or ""), _norm_match(b.venue or "")
     if va and vb:
         if token_set_ratio(va, vb) < 58:
             return False
@@ -406,7 +418,7 @@ def should_skip_cross_source_duplicate(ev: Event, seen: list[Event], local_tz: t
             continue
         # wydarzenia.wroclaw.pl often has no date in the anchor; Krajownik has "12 Kwietnia …".
         if (d_ev is None) ^ (d_r is None):
-            ta, tb = _norm(ev.title), _norm(r.title)
+            ta, tb = _norm_match(ev.title), _norm_match(r.title)
             lo, sh = (ta, tb) if len(ta) >= len(tb) else (tb, ta)
             pr = max(partial_ratio(lo, sh), partial_ratio(sh, lo))
             if pr < 48:

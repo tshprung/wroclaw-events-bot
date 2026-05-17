@@ -381,7 +381,20 @@ def main() -> int:
     )
 
     try:
-        cross_run_seen: list[Event] = []
+        now_utc = datetime.now(timezone.utc)
+        end_local = now_local + timedelta(days=window_days)
+        end_utc = end_local.astimezone(timezone.utc)
+        seen_days = int(os.environ.get("CROSSRUN_DEDUPE_SEEN_DAYS", "14"))
+        seen_days = max(1, min(seen_days, 60))
+        seen_since_utc = now_utc - timedelta(days=seen_days)
+        cross_run_seen: list[Event] = list_events_for_upcoming_digest(
+            conn,
+            now_utc=now_utc,
+            end_utc=end_utc,
+            seen_since_utc=seen_since_utc,
+            limit_scheduled=2000,
+            limit_recent_unknown=2000,
+        )
         for src in sources:
             try:
                 parser = parser_for_kind(src.kind)
