@@ -54,6 +54,7 @@ _DEFAULT_URL_PARTS: frozenset[str] = frozenset(
         # wroclaw.pl: informational/category hubs (not single events).
         "wroclaw.pl/poradnik-mieszkanca/kategoria/",
         "wroclaw.pl/inwestycje-wroclaw/aktualnosci-inwestycje",
+        "wroclaw.pl/strategia-2050/monitoring-strategii-wroclaw-2050",
         # wroclaw.pl: investment / culture / sport index pages (not single events).
         "wroclaw.pl/inwestycje-wroclaw/inwestycje-",
         "wroclaw.pl/kultura/aktualnosci",
