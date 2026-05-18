@@ -66,6 +66,8 @@ _DEFAULT_URL_PARTS: frozenset[str] = frozenset(
         # wroclaw.pl/go and wydarzenia.wroclaw.pl topic hubs (not single events).
         "wroclaw.pl/go/wydarzenia/teatr",
         "wroclaw.pl/go/wydarzenia/muzyka",
+        # wroclaw.pl/go: "Add place" form (not an event).
+        "wroclaw.pl/go/dodaj-miejsce",
         "wydarzenia.wroclaw.pl/muzyka_pop",
         "wydarzenia.wroclaw.pl/muzyka_jazz",
         # Teatr Capitol: ticket-sale blog posts and memorial / news pages (not dated shows).
