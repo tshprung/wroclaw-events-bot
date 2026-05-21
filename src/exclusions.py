@@ -116,6 +116,10 @@ _OSIEDLE_NON_EVENT_TITLE_PARTS: frozenset[str] = frozenset(
         "komisja rewizyjna",
         "komisji rewizyjnej",
         "spotkanie komisji",
+        "wyniki wyborow",
+        "wyniki wyborów",
+        "oficjalne wyniki wyborow",
+        "oficjalne wyniki wyborów",
         # Urban-planning consultations / map info (not neighbourhood “events”).
         "konsultacje planu ogolnego wroclawia",
         "konsultacje planu",
