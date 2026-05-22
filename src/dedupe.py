@@ -36,6 +36,7 @@ def _norm_match(s: str) -> str:
     s = _SPACE_RE.sub(" ", s).strip()
     if not s:
         return ""
+    s = re.sub(r"\bdev\s*[.\-]?\s*js\b", "devjs", s)
     s = re.sub(r"\bjoga\b", "yoga", s)
     return s
 
@@ -83,12 +84,14 @@ _TITLE_STOP: frozenset[str] = frozenset(
 
 def _signature_tokens(title: str) -> set[str]:
     toks: set[str] = set()
+    raw: list[str] = []
     for m in _TITLE_TOKEN_RE.finditer(title or ""):
         t = _fold(m.group(0))
         if not t:
             continue
         if t in _TITLE_STOP:
             continue
+        raw.append(t)
         if t.isdigit():
             if len(t) >= 2:
                 toks.add(t)
@@ -99,6 +102,8 @@ def _signature_tokens(title: str) -> set[str]:
         if len(t) < 5:
             continue
         toks.add(t)
+    if "dev" in raw and "js" in raw:
+        toks.add("devjs")
     return toks
 
 
@@ -378,7 +383,7 @@ def is_same_show_cross_source(a: Event, b: Event) -> bool:
     par_sl = partial_ratio(sh, lo)
     best_par = max(par_ls, par_sl)
     sa, sb = _signature_tokens(a.title), _signature_tokens(b.title)
-    strong_common = {t for t in (sa & sb) if t.isalpha() and len(t) >= 6}
+    strong_common = {t for t in (sa & sb) if t.isalpha() and (len(t) >= 6 or t == "devjs")}
     if not strong_common:
         if tsr < 44 and best_par < 62:
             return False
