@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 import re
 import unicodedata
-from urllib.parse import urlparse
+from urllib.parse import unquote, urlparse
 
 from .models import Event
 
@@ -16,6 +16,64 @@ def _fold(s: str) -> str:
     s = unicodedata.normalize("NFKD", (s or "").casefold())
     s = "".join(c for c in s if not unicodedata.combining(c))
     return _SPACE.sub(" ", s).strip()
+
+
+def _fold_loc(s: str) -> str:
+    """Like `_fold`, but map Polish ł → l so ``wroclaw`` matches Wrocław/Wroclaw."""
+    return _fold(s).replace("\u0142", "l")
+
+
+def _event_text_blob(ev: Event) -> str:
+    parts = (ev.title or "", ev.venue or "", ev.url or "")
+    return _fold_loc(" ".join(unquote(p) for p in parts).replace("·", " "))
+
+
+def _mentions_wroclaw(*parts: str | None) -> bool:
+    blob = _fold_loc(" ".join(unquote(p or "") for p in parts))
+    return "wroclaw" in blob
+
+
+def _is_wroclaw_pigulce(ev: Event) -> bool:
+    u = (ev.url or "").lower()
+    if "wroclaw-w-pigulce" in u:
+        return True
+    t = _fold_loc(ev.title or "")
+    return "wroclaw" in t and "w pigulce" in t
+
+
+def _is_wdech_wydech_rooftop_opening(ev: Event) -> bool:
+    u = (ev.url or "").lower()
+    if "nowe-otwarcie-wdech-wydech-rooftop" in u:
+        return True
+    t = _fold_loc(ev.title or "")
+    return "wdech wydech rooftop" in t and "nowe otwarcie" in t
+
+
+def _is_online_event(ev: Event) -> bool:
+    t = _event_text_blob(ev)
+    if re.search(r"\bonline\b", t):
+        return True
+    for frag in (
+        "wirtualn",  # wirtualnie / wirtualny …
+        "zdaln",  # zdalnie / zdalny …
+        "webinar",
+        "livestream",
+        "live stream",
+        "spotkanie zdalne",
+        "na zywo online",
+    ):
+        if frag in t:
+            return True
+    return False
+
+
+def _meetup_outside_wroclaw(ev: Event) -> bool:
+    u = (ev.url or "").lower()
+    if "meetup.com" not in u:
+        return False
+    if _is_online_event(ev):
+        return False
+    return not _mentions_wroclaw(ev.url, ev.title, ev.venue)
 
 
 # wroclaw.pl/go category segment — e.g. /go/wydarzenia/sztuka/123-slug
@@ -266,6 +324,15 @@ def event_is_excluded(ev: Event) -> bool:
     for kw in ("koncert", "teatr", "jazz", "dating"):
         if kw in u:
             return True
+
+    if _is_wroclaw_pigulce(ev):
+        return True
+    if _is_wdech_wydech_rooftop_opening(ev):
+        return True
+    if _is_online_event(ev):
+        return True
+    if _meetup_outside_wroclaw(ev):
+        return True
 
     # Title-based exclusions are only safe when scoped to known hosts that emit
     # lots of non-event news posts into the generic_links feed.

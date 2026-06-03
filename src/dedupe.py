@@ -434,6 +434,29 @@ def should_skip_cross_source_duplicate(ev: Event, seen: list[Event], local_tz: t
     return False
 
 
+def _wroclaw_go_text_slug(url: str) -> str | None:
+    _cat, _eid, slug = _wroclaw_go_path_tail(url or "")
+    return slug or None
+
+
+def _cross_source_show_slug(url: str) -> str | None:
+    """Shared slug for the same show on wroclaw.pl/go and krajownik.pl (different URL shapes)."""
+    go_slug = _wroclaw_go_text_slug(url or "")
+    kraj = _krajownik_slug_stem(url or "")
+    if go_slug and kraj:
+        if kraj.startswith(go_slug):
+            return go_slug
+        if go_slug.startswith(kraj):
+            return kraj
+    if go_slug:
+        return go_slug
+    if kraj:
+        # Krajownik adds tag segments after the year, e.g. …-2026-chodz_nad_miasto-200160.
+        m = re.match(r"^(.+-\d{4})(?:-.+)?$", kraj)
+        return m.group(1) if m else kraj
+    return None
+
+
 def _cross_listed_city_event_slug(url: str) -> str | None:
     """Same physical listing often appears on WroclawGuide /events/… and Hala /wydarzenie/… with the same slug."""
     lp = (url or "").strip().lower()
@@ -464,21 +487,16 @@ def fingerprint(ev: Event) -> str:
     mmu = _MEETUP_EVENT_ID_IN_URL.search(ev.url or "")
     if mmu:
         return f"meetup:{mmu.group(1)}"
-    stem = _krajownik_slug_stem(ev.url or "")
-    if stem:
-        # Stem only: date suffix caused undated vs parsed flips and hourly duplicate posts.
-        return f"kraj:{stem}"
+    xshow = _cross_source_show_slug(ev.url or "")
+    if xshow:
+        # One DB row per show across wroclaw.pl/go and krajownik (and similar slug pairs).
+        return f"xshow:{xshow}"
     wwk = _wydarzenia_wroclaw_path_key(ev.url or "")
     if wwk:
         return f"ww:{wwk}"
     xslug = _cross_listed_city_event_slug(ev.url or "")
     if xslug:
         return f"xslug:{xslug}"
-    goid = _wroclaw_go_numeric_id(ev.url or "")
-    if goid:
-        # Numeric id only: date-based keys drift between runs (LD vs anchor, startDate tweaks),
-        # which caused hourly Telegram repeats. Rows are removed after start_at passes (prune).
-        return f"go:{goid}"
     title = _norm(ev.title)
     venue = _norm(ev.venue or "")
     start = ev.start_at.isoformat() if ev.start_at else ""

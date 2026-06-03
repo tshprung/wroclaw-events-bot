@@ -61,6 +61,7 @@ _META_GO_FP_COLLAPSE = "legacy_go_fingerprint_collapsed_v1"
 _META_KRAJ_FP_COLLAPSE = "legacy_kraj_fingerprint_collapsed_v1"
 _META_WW_FP_COLLAPSE = "legacy_ww_fingerprint_collapsed_v1"
 _META_XSLUG_FP_COLLAPSE = "legacy_xslug_fingerprint_collapsed_v1"
+_META_XSHOW_FP_COLLAPSE = "legacy_xshow_fingerprint_collapsed_v1"
 
 
 def _event_from_storage_row(r: tuple) -> Event:
@@ -129,6 +130,53 @@ def _collapse_legacy_xslug_fingerprints(conn: sqlite3.Connection) -> None:
         ON CONFLICT(key) DO UPDATE SET value = excluded.value
         """,
         (_META_XSLUG_FP_COLLAPSE, _now_utc_iso()),
+    )
+
+
+def _collapse_legacy_xshow_fingerprints(conn: sqlite3.Connection) -> None:
+    """Merge go:/kraj: rows into xshow:… when the same show appears on wroclaw.pl/go and Krajownik."""
+    if conn.execute(
+        "SELECT 1 FROM bot_meta WHERE key=?",
+        (_META_XSHOW_FP_COLLAPSE,),
+    ).fetchone():
+        return
+    rows = conn.execute(
+        """
+        SELECT fingerprint, source_id, title, start_at, venue, url, city, raw_date_text, first_seen_at
+        FROM events
+        """
+    ).fetchall()
+    groups: dict[str, list[tuple]] = {}
+    for r in rows:
+        ev = _event_from_storage_row(r)
+        try:
+            new_fp = fingerprint(ev)
+        except Exception:
+            continue
+        if not new_fp.startswith("xshow:"):
+            continue
+        groups.setdefault(new_fp, []).append(r)
+    for new_fp, members in groups.items():
+        if len(members) == 1 and members[0][0] == new_fp:
+            continue
+        members.sort(key=lambda x: x[8])
+        w = members[0]
+        for r in members:
+            conn.execute("DELETE FROM events WHERE fingerprint=?", (r[0],))
+        conn.execute(
+            """
+            INSERT INTO events
+              (fingerprint, source_id, title, start_at, venue, url, city, raw_date_text, first_seen_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (new_fp, w[1], w[2], w[3], w[4], w[5], w[6], w[7], w[8]),
+        )
+    conn.execute(
+        """
+        INSERT INTO bot_meta (key, value) VALUES (?, ?)
+        ON CONFLICT(key) DO UPDATE SET value = excluded.value
+        """,
+        (_META_XSHOW_FP_COLLAPSE, _now_utc_iso()),
     )
 
 
@@ -305,6 +353,7 @@ def connect(db_path: str) -> sqlite3.Connection:
     _collapse_legacy_kraj_fingerprints(conn)
     _collapse_legacy_ww_fingerprints(conn)
     _collapse_legacy_xslug_fingerprints(conn)
+    _collapse_legacy_xshow_fingerprints(conn)
     conn.commit()
     return conn
 
