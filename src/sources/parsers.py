@@ -433,6 +433,9 @@ def _generic_link_keeps(text: str, url: str) -> bool:
         segs = [s for s in raw_path.strip("/").split("/") if s]
         if len(segs) < 2:
             return False
+    if "inyourpocket.com" in netloc.replace("www.", ""):
+        if _inyourpocket_event_slug(raw_path) is None:
+            return False
     return _likely_event_like_url(url)
 
 
@@ -676,6 +679,118 @@ def parse_krajownik_wroclaw_wydarzenia(source: Source, html: str) -> list[Event]
             )
         )
     return out
+
+
+_IYP_EVENT_DETAIL_PATH = re.compile(r"^/(?:poland/)?wroclaw/events/([^/]+)/?$", re.I)
+
+
+def _inyourpocket_event_slug(path: str) -> str | None:
+    m = _IYP_EVENT_DETAIL_PATH.match((path or "").strip())
+    return m.group(1).lower() if m else None
+
+
+def _inyourpocket_canonical_event_url(url_or_path: str) -> str | None:
+    raw = (url_or_path or "").strip()
+    path = urlparse(raw).path if raw.startswith(("http://", "https://")) else raw
+    slug = _inyourpocket_event_slug(path)
+    if not slug:
+        return None
+    return f"https://www.inyourpocket.com/wroclaw/events/{slug}"
+
+
+def parse_inyourpocket_events(source: Source, html: str) -> list[Event]:
+    """Only individual event pages under /wroclaw/events/<slug> — not listing hubs or travel articles."""
+    tzinfo = dttz.gettz("Europe/Warsaw") or dttz.tzlocal()
+    by_url: dict[str, Event] = {}
+
+    def upsert(name: str, url: str, *, start_at: datetime | None, venue: str | None) -> None:
+        clean = _inyourpocket_canonical_event_url(url)
+        if not clean:
+            return
+        title = _clean(html_module.unescape(name))
+        if not title or _JUNK_TITLE_RE.match(title) or title.lower() in _JUNK_TITLE_EQ:
+            return
+        ev = Event(
+            source_id=source.id,
+            title=title,
+            start_at=start_at,
+            venue=venue,
+            url=clean,
+            raw_date_text=None,
+        )
+        prev = by_url.get(clean)
+        if prev is None:
+            by_url[clean] = ev
+            return
+        kw: dict = {}
+        if prev.start_at is None and start_at is not None:
+            kw["start_at"] = start_at
+        if not (prev.venue or "").strip() and (venue or "").strip():
+            kw["venue"] = venue
+        if len(title) > len(prev.title or "") + 2:
+            kw["title"] = title
+        if kw:
+            by_url[clean] = Event(
+                source_id=source.id,
+                title=kw.get("title", prev.title),
+                start_at=kw.get("start_at", prev.start_at),
+                venue=kw.get("venue", prev.venue),
+                url=clean,
+                raw_date_text=None,
+            )
+
+    for script in soup(html).select('script[type="application/ld+json"]'):
+        raw = (script.string or "").strip()
+        if not raw:
+            continue
+        try:
+            data = json.loads(raw)
+        except json.JSONDecodeError:
+            continue
+        blocks: list[dict] = []
+        if isinstance(data, dict):
+            blocks.append(data)
+            for el in data.get("itemListElement") or []:
+                if isinstance(el, dict):
+                    blocks.append(el)
+        elif isinstance(data, list):
+            blocks.extend(x for x in data if isinstance(x, dict))
+
+        for item in blocks:
+            typ = item.get("@type")
+            is_ev = typ == "Event" or (isinstance(typ, list) and "Event" in typ)
+            if not is_ev:
+                continue
+            name = item.get("name") or ""
+            url_u = item.get("url") or ""
+            if not name or not url_u:
+                continue
+            st: datetime | None = None
+            sd = item.get("startDate")
+            if sd:
+                try:
+                    st = dtparser.isoparse(str(sd).replace("Z", "+00:00"))
+                except (ValueError, TypeError):
+                    st = None
+                if st is not None:
+                    if st.tzinfo is None:
+                        st = st.replace(tzinfo=tzinfo)
+                    else:
+                        st = st.astimezone(tzinfo)
+            loc = item.get("location")
+            venue = None
+            if isinstance(loc, dict):
+                venue = _clean(loc.get("name") or "") or None
+            upsert(name, url_u, start_at=st, venue=venue)
+
+    links = extract_links(source.url, html, selector="a[href]", limit=120)
+    for text, url in links:
+        clean = _inyourpocket_canonical_event_url(url)
+        if not clean:
+            continue
+        upsert(text, clean, start_at=None, venue=None)
+
+    return list(by_url.values())
 
 
 def parse_generic_links(source: Source, html: str, *, link_limit: int | None = None) -> list[Event]:
@@ -1424,6 +1539,7 @@ def parser_for_kind(kind: str) -> Callable[[Source, str], list[Event]]:
         "tarczynski_arena": parse_tarczynski_arena,
         "nfm_repertuar": parse_nfm_repertuar,
         "meetup_find": parse_meetup_find,
+        "inyourpocket_events": parse_inyourpocket_events,
         "wroclawguide_calendar": parse_wroclawguide_calendar,
         "grotowski_wydarzenia": parse_grotowski_wydarzenia,
         "kino_nh": parse_kino_nh,

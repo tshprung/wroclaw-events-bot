@@ -15,6 +15,10 @@ from .models import Event
 _SPACE_RE = re.compile(r"\s+")
 _FB_EVENT_ID_IN_URL = re.compile(r"facebook\.com/events/(\d+)", re.I)
 _MEETUP_EVENT_ID_IN_URL = re.compile(r"meetup\.com/.*/events/(\d+)", re.I)
+_IYP_EVENT_SLUG_IN_URL = re.compile(
+    r"inyourpocket\.com/(?:poland/)?wroclaw/events/([^/?#]+)",
+    re.I,
+)
 _GO_PATH_EVENT_ID = re.compile(r"/go/wydarzenia/[^/]+/(\d+)-", re.I)
 _GO_PATH_TAIL = re.compile(r"/go/wydarzenia/([^/]+)/(\d+)-([^/]+)$", re.I)
 _RAW_DMY_FULL = re.compile(r"\b(\d{1,2})\.(\d{1,2})\.(\d{2,4})\b")
@@ -487,6 +491,9 @@ def fingerprint(ev: Event) -> str:
     mmu = _MEETUP_EVENT_ID_IN_URL.search(ev.url or "")
     if mmu:
         return f"meetup:{mmu.group(1)}"
+    miyp = _IYP_EVENT_SLUG_IN_URL.search(ev.url or "")
+    if miyp:
+        return f"iyp:{miyp.group(1).lower()}"
     xshow = _cross_source_show_slug(ev.url or "")
     if xshow:
         # One DB row per show across wroclaw.pl/go and krajownik (and similar slug pairs).

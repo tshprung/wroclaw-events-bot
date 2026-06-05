@@ -67,6 +67,20 @@ def _is_online_event(ev: Event) -> bool:
     return False
 
 
+_IYP_EVENT_DETAIL_PATH = re.compile(r"^/(?:poland/)?wroclaw/events/[^/]+/?$", re.I)
+
+
+def _inyourpocket_non_event(ev: Event) -> bool:
+    u = (ev.url or "").lower()
+    if "inyourpocket.com" not in u:
+        return False
+    try:
+        path = urlparse(ev.url or "").path or ""
+    except ValueError:
+        return True
+    return _IYP_EVENT_DETAIL_PATH.match(path.strip()) is None
+
+
 def _meetup_outside_wroclaw(ev: Event) -> bool:
     u = (ev.url or "").lower()
     if "meetup.com" not in u:
@@ -332,6 +346,8 @@ def event_is_excluded(ev: Event) -> bool:
     if _is_online_event(ev):
         return True
     if _meetup_outside_wroclaw(ev):
+        return True
+    if _inyourpocket_non_event(ev):
         return True
 
     # Title-based exclusions are only safe when scoped to known hosts that emit

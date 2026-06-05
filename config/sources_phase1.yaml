@@ -205,7 +205,7 @@ sources:
   - id: inyourpocket_wroclaw_events
     name: In Your Pocket Wrocław events
     url: https://www.inyourpocket.com/wroclaw/events
-    kind: generic_links
+    kind: inyourpocket_events
     enabled: true
 
   - id: hydropolis_go_wroclaw
