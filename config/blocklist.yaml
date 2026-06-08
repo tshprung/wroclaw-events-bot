@@ -1,0 +1,25 @@
+version: 1
+
+# Events starting after this local time (Europe/Warsaw / TIMEZONE) are not posted.
+# Events with no known start time are kept. Set to null to disable.
+schedule:
+  block_starts_after: "19:30"
+
+# Add your own rules here (case-insensitive; Polish ł matches l).
+# Fields on a rule are AND-ed; use title_all when every fragment must appear in the title.
+rules:
+  - note: Recurring walk — Wrocław w pigułce
+    url_contains: wroclaw-w-pigulce
+
+  - note: Recurring walk — Wrocław w pigułce (title)
+    title_all:
+      - wroclaw
+      - w pigulce
+
+  - note: Wdech/Wydech rooftop opening
+    url_contains: nowe-otwarcie-wdech-wydech-rooftop
+
+  - note: Wdech/Wydech rooftop opening (title)
+    title_all:
+      - wdech wydech rooftop
+      - nowe otwarcie

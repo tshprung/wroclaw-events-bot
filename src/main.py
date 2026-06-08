@@ -512,7 +512,7 @@ def main() -> int:
                         len(events_raw),
                         window_days,
                     )
-                events, n_excl = filter_out_excluded_events(events)
+                events, n_excl = filter_out_excluded_events(events, now_local)
                 if n_excl:
                     log.info("[%s] exclusions: dropped %d", src.id, n_excl)
                 events = collapse_wroclaw_go_same_detail_url(events, tzinfo)

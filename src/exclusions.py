@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import re
 import unicodedata
+from datetime import datetime
 from urllib.parse import unquote, urlparse
 
 from .models import Event
@@ -31,22 +32,6 @@ def _event_text_blob(ev: Event) -> str:
 def _mentions_wroclaw(*parts: str | None) -> bool:
     blob = _fold_loc(" ".join(unquote(p or "") for p in parts))
     return "wroclaw" in blob
-
-
-def _is_wroclaw_pigulce(ev: Event) -> bool:
-    u = (ev.url or "").lower()
-    if "wroclaw-w-pigulce" in u:
-        return True
-    t = _fold_loc(ev.title or "")
-    return "wroclaw" in t and "w pigulce" in t
-
-
-def _is_wdech_wydech_rooftop_opening(ev: Event) -> bool:
-    u = (ev.url or "").lower()
-    if "nowe-otwarcie-wdech-wydech-rooftop" in u:
-        return True
-    t = _fold_loc(ev.title or "")
-    return "wdech wydech rooftop" in t and "nowe otwarcie" in t
 
 
 def _is_online_event(ev: Event) -> bool:
@@ -339,10 +324,6 @@ def event_is_excluded(ev: Event) -> bool:
         if kw in u:
             return True
 
-    if _is_wroclaw_pigulce(ev):
-        return True
-    if _is_wdech_wydech_rooftop_opening(ev):
-        return True
     if _is_online_event(ev):
         return True
     if _meetup_outside_wroclaw(ev):
@@ -382,6 +363,21 @@ def event_is_excluded(ev: Event) -> bool:
     return False
 
 
-def filter_out_excluded_events(events: list[Event]) -> tuple[list[Event], int]:
-    out = [e for e in events if not event_is_excluded(e)]
-    return out, len(events) - len(out)
+def filter_out_excluded_events(
+    events: list[Event],
+    now_local: datetime,
+) -> tuple[list[Event], int]:
+    from .blocklist import event_blocked, load_blocklist
+
+    cfg = load_blocklist()
+    out: list[Event] = []
+    dropped = 0
+    for e in events:
+        if event_is_excluded(e):
+            dropped += 1
+            continue
+        if event_blocked(e, now_local, cfg):
+            dropped += 1
+            continue
+        out.append(e)
+    return out, dropped
