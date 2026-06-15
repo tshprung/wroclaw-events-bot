@@ -87,7 +87,7 @@ def _append_rule(path: Path, rule: BlockRule) -> None:
     else:
         doc = {
             "version": 1,
-            "schedule": {"block_starts_after": "19:30"},
+            "schedule": {"block_starts_after": "18:05"},
             "rules": [],
         }
     rules = list(doc.get("rules") or [])

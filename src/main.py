@@ -29,11 +29,14 @@ from .exclusions import filter_out_excluded_events
 from .health import should_admin_alert
 from .models import Event, Source
 from .storage import (
+    auto_disable_failure_threshold,
     connect,
+    get_auto_disabled_source_ids,
     get_bot_meta_value,
     insert_event_if_new,
     list_events_for_upcoming_digest,
     list_source_health_alerts,
+    maybe_auto_disable_source,
     set_bot_meta_value,
 )
 from .storage import maybe_delete_past_events, upsert_source_health
@@ -43,6 +46,43 @@ from .sources.parsers import parser_for_kind
 
 
 log = logging.getLogger("wroclaw_events_bot")
+
+
+def _record_source_failure(
+    conn: sqlite3.Connection,
+    src: Source,
+    auto_disabled: set[str],
+    *,
+    http_status: int | None = None,
+    error_kind: str | None = None,
+    error_detail: str | None = None,
+    sample_count: int | None = None,
+) -> int:
+    consecutive = upsert_source_health(
+        conn,
+        src.id,
+        src.url,
+        ok=False,
+        http_status=http_status,
+        error_kind=error_kind,
+        error_detail=error_detail,
+        sample_count=sample_count,
+    )
+    detail = (error_detail or error_kind or "failure")[:200]
+    if maybe_auto_disable_source(
+        conn,
+        src.id,
+        consecutive,
+        reason=f"{consecutive} consecutive failures: {detail}",
+    ):
+        auto_disabled.add(src.id)
+        log.error(
+            "[%s] auto-disabled after %d consecutive failures (threshold=%d)",
+            src.id,
+            consecutive,
+            auto_disable_failure_threshold(),
+        )
+    return consecutive
 
 
 def _within_allowed_hours(now_local: datetime) -> bool:
@@ -352,9 +392,16 @@ def main() -> int:
     run_id = str(uuid.uuid4())
     log.info("Run %s starting at %s", run_id, now_local.isoformat())
 
-    sources = [s for s in _load_all_sources() if s.enabled]
     session = requests.Session()
     conn = connect(settings.db_path)
+    auto_disabled_ids = set(get_auto_disabled_source_ids(conn))
+    if auto_disabled_ids:
+        log.info(
+            "Skipping auto-disabled sources (%d): %s",
+            len(auto_disabled_ids),
+            ", ".join(sorted(auto_disabled_ids)),
+        )
+    sources = [s for s in _load_all_sources() if s.enabled and s.id not in auto_disabled_ids]
 
     telegram: TelegramClient | None = None
     if not settings.dry_run:
@@ -396,6 +443,8 @@ def main() -> int:
             limit_recent_unknown=2000,
         )
         for src in sources:
+            if src.id in auto_disabled_ids:
+                continue
             try:
                 parser = parser_for_kind(src.kind)
                 events_raw: list[Event] = []
@@ -416,11 +465,10 @@ def main() -> int:
                         http_for_health = res.status_code
                         if res.status_code >= 400:
                             if page == 1:
-                                upsert_source_health(
+                                _record_source_failure(
                                     conn,
-                                    src.id,
-                                    src.url,
-                                    ok=False,
+                                    src,
+                                    auto_disabled_ids,
                                     http_status=res.status_code,
                                     error_kind="http_error",
                                     error_detail=f"HTTP {res.status_code}",
@@ -456,11 +504,10 @@ def main() -> int:
                         http_for_health = res.status_code
                         if res.status_code >= 400:
                             if delta == 0:
-                                upsert_source_health(
+                                _record_source_failure(
                                     conn,
-                                    src.id,
-                                    src.url,
-                                    ok=False,
+                                    src,
+                                    auto_disabled_ids,
                                     http_status=res.status_code,
                                     error_kind="http_error",
                                     error_detail=f"HTTP {res.status_code}",
@@ -488,11 +535,10 @@ def main() -> int:
                         res = fetch_url(session, src.url, verify=src.verify_ssl)
                     http_for_health = res.status_code
                     if res.status_code >= 400:
-                        upsert_source_health(
+                        _record_source_failure(
                             conn,
-                            src.id,
-                            src.url,
-                            ok=False,
+                            src,
+                            auto_disabled_ids,
                             http_status=res.status_code,
                             error_kind="http_error",
                             error_detail=f"HTTP {res.status_code}",
@@ -606,11 +652,10 @@ def main() -> int:
                 conn.commit()
             except requests.exceptions.RequestException as e:
                 # Network/proxy blocks are common; avoid full stack traces spam.
-                upsert_source_health(
+                _record_source_failure(
                     conn,
-                    src.id,
-                    src.url,
-                    ok=False,
+                    src,
+                    auto_disabled_ids,
                     error_kind="request_error",
                     error_detail=str(e)[:300],
                 )
@@ -618,11 +663,10 @@ def main() -> int:
                 total_fail += 1
                 log.warning("[%s] request error: %s", src.id, str(e)[:220])
             except Exception as e:
-                upsert_source_health(
+                _record_source_failure(
                     conn,
-                    src.id,
-                    src.url,
-                    ok=False,
+                    src,
+                    auto_disabled_ids,
                     error_kind=type(e).__name__,
                     error_detail=str(e)[:300],
                 )

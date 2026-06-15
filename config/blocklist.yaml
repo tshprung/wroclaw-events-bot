@@ -3,7 +3,7 @@ version: 1
 # Events starting after this local time (Europe/Warsaw / TIMEZONE) are not posted.
 # Events with no known start time are kept. Set to null to disable.
 schedule:
-  block_starts_after: "19:30"
+  block_starts_after: "18:05"
 
 # Add your own rules here (case-insensitive; Polish ł matches l).
 # Fields on a rule are AND-ed; use title_all when every fragment must appear in the title.

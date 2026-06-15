@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import re
 import sqlite3
@@ -368,7 +369,8 @@ def upsert_source_health(
     http_status: int | None = None,
     error_kind: str | None = None,
     error_detail: str | None = None,
-) -> None:
+) -> int:
+    """Update health row. Returns consecutive failure count after this write (0 on success)."""
     row = conn.execute(
         "SELECT consecutive_failures FROM source_health WHERE source_id=?",
         (source_id,),
@@ -391,6 +393,7 @@ def upsert_source_health(
             """,
             (source_id, url, _now_utc_iso(), http_status, sample_count),
         )
+        return 0
     else:
         consecutive += 1
         conn.execute(
@@ -408,6 +411,68 @@ def upsert_source_health(
             """,
             (source_id, url, _now_utc_iso(), consecutive, http_status, error_kind, error_detail, sample_count),
         )
+        return consecutive
+
+
+_META_AUTO_DISABLED_SOURCES = "auto_disabled_sources_v1"
+
+
+def auto_disable_failure_threshold() -> int:
+    try:
+        n = int(os.environ.get("SOURCE_AUTO_DISABLE_FAILURES", "10"))
+    except ValueError:
+        n = 10
+    return max(1, n)
+
+
+def get_auto_disabled_source_ids(conn: sqlite3.Connection) -> frozenset[str]:
+    raw = get_bot_meta_value(conn, _META_AUTO_DISABLED_SOURCES)
+    if not raw:
+        return frozenset()
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError:
+        return frozenset()
+    if isinstance(data, list):
+        return frozenset(str(x).strip() for x in data if str(x).strip())
+    if isinstance(data, dict):
+        ids = data.get("ids") or []
+        if isinstance(ids, list):
+            return frozenset(str(x).strip() for x in ids if str(x).strip())
+    return frozenset()
+
+
+def auto_disable_source(conn: sqlite3.Connection, source_id: str, *, reason: str) -> bool:
+    """Persist auto-disable for a source. Returns True if newly disabled."""
+    sid = (source_id or "").strip()
+    if not sid:
+        return False
+    ids = set(get_auto_disabled_source_ids(conn))
+    if sid in ids:
+        return False
+    ids.add(sid)
+    payload = json.dumps(sorted(ids), ensure_ascii=False)
+    set_bot_meta_value(conn, _META_AUTO_DISABLED_SOURCES, payload)
+    conn.execute(
+        """
+        INSERT INTO bot_meta (key, value) VALUES (?, ?)
+        ON CONFLICT(key) DO UPDATE SET value = excluded.value
+        """,
+        (f"auto_disabled_reason:{sid}", reason[:500]),
+    )
+    return True
+
+
+def maybe_auto_disable_source(
+    conn: sqlite3.Connection,
+    source_id: str,
+    consecutive_failures: int,
+    *,
+    reason: str,
+) -> bool:
+    if consecutive_failures < auto_disable_failure_threshold():
+        return False
+    return auto_disable_source(conn, source_id, reason=reason)
 
 
 _META_LAST_PRUNE = "last_event_prune_at"
