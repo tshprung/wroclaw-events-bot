@@ -66,6 +66,7 @@ class BlockRule:
 
 @dataclass(frozen=True)
 class BlocklistConfig:
+    block_starts_before: time | None
     block_starts_after: time | None
     rules: tuple[BlockRule, ...]
 
@@ -98,14 +99,19 @@ def _rule_from_raw(raw: dict[str, Any]) -> BlockRule | None:
 def load_blocklist(path: Path | None = None) -> BlocklistConfig:
     p = path or default_blocklist_path()
     if not p.is_file():
+        before = _parse_hhmm(os.environ.get("EVENT_BLOCK_START_BEFORE"))
         after = _parse_hhmm(os.environ.get("EVENT_BLOCK_START_AFTER"))
-        return BlocklistConfig(block_starts_after=after, rules=())
+        return BlocklistConfig(block_starts_before=before, block_starts_after=after, rules=())
 
     doc = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
     sched = doc.get("schedule") if isinstance(doc.get("schedule"), dict) else {}
+    before = _parse_hhmm(os.environ.get("EVENT_BLOCK_START_BEFORE"))
     after = _parse_hhmm(os.environ.get("EVENT_BLOCK_START_AFTER"))
-    if after is None and isinstance(sched, dict):
-        after = _parse_hhmm(sched.get("block_starts_after"))
+    if isinstance(sched, dict):
+        if before is None:
+            before = _parse_hhmm(sched.get("block_starts_before"))
+        if after is None:
+            after = _parse_hhmm(sched.get("block_starts_after"))
 
     rules: list[BlockRule] = []
     for raw in doc.get("rules") or []:
@@ -115,7 +121,7 @@ def load_blocklist(path: Path | None = None) -> BlocklistConfig:
         if rule is not None:
             rules.append(rule)
 
-    return BlocklistConfig(block_starts_after=after, rules=tuple(rules))
+    return BlocklistConfig(block_starts_before=before, block_starts_after=after, rules=tuple(rules))
 
 
 def rule_matches(ev: Event, rule: BlockRule) -> bool:
@@ -141,14 +147,21 @@ def block_reason_for_event(ev: Event, cfg: BlocklistConfig) -> str | None:
     return None
 
 
-def blocked_by_schedule(ev: Event, now: datetime, cfg: BlocklistConfig) -> bool:
-    cutoff = cfg.block_starts_after
-    if cutoff is None:
-        return False
+def blocked_by_schedule(ev: Event, now: datetime, cfg: BlocklistConfig) -> str | None:
+    """Return schedule block reason, or None if the event passes the time window."""
+    earliest = cfg.block_starts_before
+    latest = cfg.block_starts_after
+    if earliest is None and latest is None:
+        return None
     resolved = resolve_when(ev, now)
     if resolved is None or resolved.tm is None:
-        return False
-    return resolved.tm > cutoff
+        return None
+    tm = resolved.tm
+    if earliest is not None and tm < earliest:
+        return f"starts before {earliest.strftime('%H:%M')}"
+    if latest is not None and tm > latest:
+        return f"starts after {latest.strftime('%H:%M')}"
+    return None
 
 
 def block_reason(ev: Event, now: datetime, cfg: BlocklistConfig | None = None) -> str | None:
@@ -157,10 +170,9 @@ def block_reason(ev: Event, now: datetime, cfg: BlocklistConfig | None = None) -
     note = block_reason_for_event(ev, cfg)
     if note:
         return f"blocklist: {note}"
-    if blocked_by_schedule(ev, now, cfg):
-        cutoff = cfg.block_starts_after
-        label = cutoff.strftime("%H:%M") if cutoff else "?"
-        return f"schedule: starts after {label}"
+    sched = blocked_by_schedule(ev, now, cfg)
+    if sched:
+        return f"schedule: {sched}"
     return None
 
 

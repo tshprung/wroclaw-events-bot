@@ -39,10 +39,15 @@ def cmd_list(_: argparse.Namespace) -> int:
     cfg = load_blocklist()
     path = default_blocklist_path()
     print(f"Blocklist: {path.resolve()}")
-    if cfg.block_starts_after is not None:
-        _print(f"Schedule: drop events starting after {cfg.block_starts_after.strftime('%H:%M')} local")
+    if cfg.block_starts_before is not None or cfg.block_starts_after is not None:
+        parts: list[str] = []
+        if cfg.block_starts_before is not None:
+            parts.append(f"not before {cfg.block_starts_before.strftime('%H:%M')}")
+        if cfg.block_starts_after is not None:
+            parts.append(f"not after {cfg.block_starts_after.strftime('%H:%M')}")
+        _print(f"Schedule: keep events {', '.join(parts)} local (when time is known)")
     else:
-        _print("Schedule: no start-time cutoff")
+        _print("Schedule: no start-time window")
     print()
     if not cfg.rules:
         print("(no pattern rules)")
@@ -87,7 +92,7 @@ def _append_rule(path: Path, rule: BlockRule) -> None:
     else:
         doc = {
             "version": 1,
-            "schedule": {"block_starts_after": "18:05"},
+            "schedule": {"block_starts_before": "06:00", "block_starts_after": "18:05"},
             "rules": [],
         }
     rules = list(doc.get("rules") or [])
