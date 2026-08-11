@@ -13,13 +13,13 @@ sources:
     name: wroclaw.pl/go sport i rekreacja
     url: https://www.wroclaw.pl/go/wydarzenia/sport-i-rekreacja
     kind: wroclaw_go
-    enabled: true
+    enabled: false
 
   - id: wroclaw_go_rozrywka
     name: wroclaw.pl/go rozrywka
     url: https://www.wroclaw.pl/go/wydarzenia/rozrywka
     kind: wroclaw_go
-    enabled: true
+    enabled: false
 
   # Pojedyncza strona wydarzenia na go.wroclaw — gdy nie wyplywa z listy „wszystkie” w czasie.
   - id: wroclaw_go_detail_festiwal_kolorow_holi_2026
@@ -221,13 +221,13 @@ sources:
     name: wroclaw.pl/go (Hala Stulecia place filter)
     url: https://www.wroclaw.pl/go/wydarzenia?miejsce=151-hala-stulecia-we-wroclawiu
     kind: wroclaw_go
-    enabled: true
+    enabled: false
 
   - id: stadion_wroclaw_go
     name: wroclaw.pl/go (Stadion Wrocław place filter)
     url: https://www.wroclaw.pl/go/wydarzenia?miejsce=942-stadion-wroclaw
     kind: wroclaw_go
-    enabled: true
+    enabled: false
 
   - id: biblioteka_wroclaw
     name: Biblioteka Miejska (wydarzenia)
@@ -245,6 +245,18 @@ sources:
     name: Wrocławski Teatr Współczesny
     url: https://wteatrw.pl/
     kind: generic_links
+    enabled: false
+
+  - id: wroclaw_go_dla_dzieci
+    name: wroclaw.pl/go (Wydarzenia dla dzieci)
+    url: https://www.wroclaw.pl/go/wydarzenia/dla-kogo/dla-dzieci
+    kind: wroclaw_go
+    enabled: true
+
+  - id: wroclaw_go_zajecia_dla_dzieci
+    name: wroclaw.pl/go (Zajęcia dla dzieci)
+    url: https://www.wroclaw.pl/go/wydarzenia/edukacja-i-rozwoj/zajecia-dla-dzieci
+    kind: wroclaw_go
     enabled: false
 
   - id: zamek_wydarzenia

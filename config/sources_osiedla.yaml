@@ -12,43 +12,43 @@ sources:
     name: wroclaw.pl/go (CK Nowy Pafawag)
     url: https://www.wroclaw.pl/go/wydarzenia?miejsce=22960-centrum-kultury-nowy-pafawag
     kind: wroclaw_go
-    enabled: true
+    enabled: false
 
   - id: go_miejsce_klub_firlej
     name: wroclaw.pl/go (Klub Firlej)
     url: https://www.wroclaw.pl/go/wydarzenia?miejsce=809-klub-firlej-osrodek-dzialan-artystycznych
     kind: wroclaw_go
-    enabled: true
+    enabled: false
 
   - id: go_miejsce_mdk_kopernika
     name: wroclaw.pl/go (MDK im. Kopernika)
     url: https://www.wroclaw.pl/go/wydarzenia?miejsce=1384064-mlodziezowy-dom-kultury-im-mikolaja-kopernika
     kind: wroclaw_go
-    enabled: true
+    enabled: false
 
   - id: go_miejsce_ck_agora
     name: wroclaw.pl/go (CK Agora)
     url: https://www.wroclaw.pl/go/wydarzenia?miejsce=855-centrum-kultury-agora-we-wroclawiu
     kind: wroclaw_go
-    enabled: true
+    enabled: false
 
   - id: go_miejsce_centrum_historii_zajezdnia
     name: wroclaw.pl/go (Centrum Historii Zajezdnia)
     url: https://www.wroclaw.pl/go/wydarzenia?miejsce=29980-centrum-historii-zajezdnia
     kind: wroclaw_go
-    enabled: true
+    enabled: false
 
   - id: go_miejsce_czasoprzestrzen_dabie
     name: wroclaw.pl/go (Czasoprzestrzen — Zajezdnia Dąbie)
     url: https://www.wroclaw.pl/go/wydarzenia?miejsce=1259858-czasoprzestrzen
     kind: wroclaw_go
-    enabled: true
+    enabled: false
 
   - id: go_miejsce_vertigo_jazz_club
     name: wroclaw.pl/go (Vertigo Jazz Club)
     url: https://www.wroclaw.pl/go/wydarzenia?miejsce=915-vertigo-jazz-club
     kind: wroclaw_go
-    enabled: true
+    enabled: false
 
   # Mirrors disabled opera_wroclawska scrape (operator preference).
   - id: go_miejsce_opera_wroclawska
