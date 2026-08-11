@@ -33,6 +33,9 @@ from .storage import (
     auto_disable_failure_threshold,
     connect,
     get_auto_disabled_source_ids,
+    get_source_backoff_ids,
+    set_source_backoff,
+    clear_source_backoff,
     get_bot_meta_value,
     insert_event_if_new,
     list_events_for_upcoming_digest,
@@ -70,19 +73,14 @@ def _record_source_failure(
         sample_count=sample_count,
     )
     detail = (error_detail or error_kind or "failure")[:200]
-    if maybe_auto_disable_source(
-        conn,
+    until = set_source_backoff(conn, src.id, consecutive_failures=consecutive)
+    log.warning(
+        "[%s] temporary backoff after failure #%d until %s: %s",
         src.id,
         consecutive,
-        reason=f"{consecutive} consecutive failures: {detail}",
-    ):
-        auto_disabled.add(src.id)
-        log.error(
-            "[%s] auto-disabled after %d consecutive failures (threshold=%d)",
-            src.id,
-            consecutive,
-            auto_disable_failure_threshold(),
-        )
+        until.isoformat(),
+        detail,
+    )
     return consecutive
 
 
@@ -396,13 +394,21 @@ def main() -> int:
     session = requests.Session()
     conn = connect(settings.db_path)
     auto_disabled_ids = set(get_auto_disabled_source_ids(conn))
+    backoff_ids = set(get_source_backoff_ids(conn))
+    skipped_ids = auto_disabled_ids | backoff_ids
     if auto_disabled_ids:
-        log.info(
-            "Skipping auto-disabled sources (%d): %s",
+        log.warning(
+            "Skipping legacy permanently auto-disabled sources (%d): %s",
             len(auto_disabled_ids),
             ", ".join(sorted(auto_disabled_ids)),
         )
-    sources = [s for s in _load_all_sources() if s.enabled and s.id not in auto_disabled_ids]
+    if backoff_ids:
+        log.info(
+            "Skipping temporarily backed-off sources (%d): %s",
+            len(backoff_ids),
+            ", ".join(sorted(backoff_ids)),
+        )
+    sources = [s for s in _load_all_sources() if s.enabled and s.id not in skipped_ids]
 
     telegram: TelegramClient | None = None
     if not settings.dry_run:
@@ -444,7 +450,7 @@ def main() -> int:
             limit_recent_unknown=2000,
         )
         for src in sources:
-            if src.id in auto_disabled_ids:
+            if src.id in auto_disabled_ids or src.id in backoff_ids:
                 continue
             try:
                 parser = parser_for_kind(src.kind)
@@ -606,6 +612,7 @@ def main() -> int:
                     http_status=http_for_health,
                     sample_count=len(events),
                 )
+                clear_source_backoff(conn, src.id)
                 total_ok += 1
 
                 new_for_source = 0

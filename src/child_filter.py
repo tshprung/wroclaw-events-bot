@@ -63,6 +63,35 @@ _EXCLUDE_STRONG = (
     "21+",
 )
 
+_JUNK_TITLES = (
+    "aktualnosci",
+    "aktualności",
+    "bilety",
+    "kino",
+    "kontakt",
+    "wyszukiwarka",
+    "mapa serwisu",
+    "przejdz do menu glownego",
+    "przejdź do menu głównego",
+    "przejdz do glownej tresci serwisu",
+    "przejdź do głównej treści serwisu",
+    "materiały prasowe",
+    "materialy prasowe",
+    "czytaj więcej",
+    "czytaj wiecej",
+)
+
+_JUNK_URL_PARTS = (
+    "/pressroom/",
+    "/kontakt",
+    "/bilety/",
+    "/wyszukiwarka",
+    "#mainpagenav",
+    "#mainnews",
+    "#servicesearch",
+    "#sitemap",
+)
+
 _AGE_RE = re.compile(r"(?:od\s*)?(\d{1,2})\s*(?:-|–|—|do)\s*(\d{1,2})\s*(?:lat|r\.?)?", re.I)
 _PLUS_RE = re.compile(r"(?:od\s*)?(\d{1,2})\s*\+", re.I)
 
@@ -88,7 +117,13 @@ def _extract_age_range(text: str) -> tuple[int | None, int | None]:
 
 
 def _heuristic(event: Event) -> ChildDecision | None:
+    title = _fold(event.title or "")
+    url = (event.url or "").casefold()
     text = _fold(" ".join((event.title or "", event.venue or "", unquote(event.url or ""))))
+
+    # Reject obvious navigation/content pages before fetching the page or calling the LLM.
+    if title in {_fold(x) for x in _JUNK_TITLES} or any(part in url for part in _JUNK_URL_PARTS):
+        return ChildDecision(False, None, None, 0.99, "Not an event page (navigation/content page)")
     age_min, age_max = _extract_age_range(text)
 
     if age_min is not None and age_min >= 7:
@@ -161,7 +196,6 @@ PAGE TEXT:
             headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
             json={
                 "model": model,
-                "temperature": 0,
                 "response_format": {"type": "json_object"},
                 "messages": [
                     {"role": "system", "content": "You are a strict event relevance classifier. The requested audience is children aged 0-6 and their parents."},
@@ -213,9 +247,9 @@ def classify_event(
         decision = _openai_classify(event, page_text)
 
     if decision is None:
-        # When no API key is configured (or the API fails), fail closed rather than
-        # flooding the channel with events that have not passed the child filter.
-        decision = ChildDecision(False, None, None, 0.0, "No reliable child-age classification available")
+        # Fail closed, but do NOT cache an API failure. A transient API error must
+        # be retried on the next run after the problem is fixed.
+        return ChildDecision(False, None, None, 0.0, "No reliable child-age classification available")
 
     save_child_classification(
         conn,

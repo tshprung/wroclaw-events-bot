@@ -428,6 +428,7 @@ def upsert_source_health(
 
 
 _META_AUTO_DISABLED_SOURCES = "auto_disabled_sources_v1"
+_META_SOURCE_BACKOFF = "source_backoff_v1"
 
 
 def auto_disable_failure_threshold() -> int:
@@ -453,6 +454,65 @@ def get_auto_disabled_source_ids(conn: sqlite3.Connection) -> frozenset[str]:
         if isinstance(ids, list):
             return frozenset(str(x).strip() for x in ids if str(x).strip())
     return frozenset()
+
+
+def get_source_backoff_ids(conn: sqlite3.Connection, *, now: datetime | None = None) -> frozenset[str]:
+    """Return sources temporarily backed off until a future timestamp."""
+    raw = get_bot_meta_value(conn, _META_SOURCE_BACKOFF)
+    if not raw:
+        return frozenset()
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError:
+        return frozenset()
+    if not isinstance(data, dict):
+        return frozenset()
+    now_dt = now or datetime.now(timezone.utc)
+    out: set[str] = set()
+    for sid, until in data.items():
+        try:
+            if datetime.fromisoformat(str(until)) > now_dt:
+                out.add(str(sid))
+        except (TypeError, ValueError):
+            continue
+    return frozenset(out)
+
+
+def set_source_backoff(
+    conn: sqlite3.Connection,
+    source_id: str,
+    *,
+    consecutive_failures: int,
+    now: datetime | None = None,
+) -> datetime:
+    """Temporarily skip a failing source; backoff grows 12h -> 24h -> 48h."""
+    now_dt = now or datetime.now(timezone.utc)
+    hours = 12 if consecutive_failures <= 1 else 24 if consecutive_failures == 2 else 48
+    until = now_dt + timedelta(hours=hours)
+    raw = get_bot_meta_value(conn, _META_SOURCE_BACKOFF)
+    try:
+        data = json.loads(raw) if raw else {}
+    except json.JSONDecodeError:
+        data = {}
+    if not isinstance(data, dict):
+        data = {}
+    data[str(source_id)] = until.isoformat()
+    set_bot_meta_value(conn, _META_SOURCE_BACKOFF, json.dumps(data, ensure_ascii=False, sort_keys=True))
+    return until
+
+
+def clear_source_backoff(conn: sqlite3.Connection, source_id: str) -> None:
+    raw = get_bot_meta_value(conn, _META_SOURCE_BACKOFF)
+    if not raw:
+        return
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError:
+        return
+    if not isinstance(data, dict) or source_id not in data:
+        return
+    del data[source_id]
+    set_bot_meta_value(conn, _META_SOURCE_BACKOFF, json.dumps(data, ensure_ascii=False, sort_keys=True))
 
 
 def auto_disable_source(conn: sqlite3.Connection, source_id: str, *, reason: str) -> bool:
