@@ -61,10 +61,16 @@ _EXCLUDE_STRONG = (
     "18+",
     "20+",
     "21+",
+    "mlodzi dorosli",
+    "młodzi dorośli",
 )
 
 _AGE_RE = re.compile(r"(?:od\s*)?(\d{1,2})\s*(?:-|–|—|do)\s*(\d{1,2})\s*(?:lat|r\.?)?", re.I)
 _PLUS_RE = re.compile(r"(?:od\s*)?(\d{1,2})\s*\+", re.I)
+_MIN_AGE_RE = re.compile(
+    r"(?:od|wiek(?:iem)?|w wieku)\s*(\d{1,2})\s*(?:lat|r\.?)",
+    re.I,
+)
 
 
 def _fold(text: str) -> str:
@@ -84,6 +90,9 @@ def _extract_age_range(text: str) -> tuple[int | None, int | None]:
     plus = _PLUS_RE.search(folded)
     if plus:
         return int(plus.group(1)), None
+    minimum = _MIN_AGE_RE.search(folded)
+    if minimum:
+        return int(minimum.group(1)), None
     return None, None
 
 
