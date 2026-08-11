@@ -35,6 +35,19 @@ CREATE TABLE IF NOT EXISTS bot_meta (
   value TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS child_classifications (
+  fingerprint TEXT PRIMARY KEY,
+  relevant INTEGER NOT NULL,
+  age_min INTEGER,
+  age_max INTEGER,
+  confidence REAL,
+  reason TEXT,
+  classified_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_child_classifications_relevant
+  ON child_classifications(relevant);
+
 CREATE TABLE IF NOT EXISTS source_health (
   source_id TEXT PRIMARY KEY,
   url TEXT NOT NULL,
@@ -600,6 +613,64 @@ def set_bot_meta_value(conn: sqlite3.Connection, key: str, value: str) -> None:
     )
 
 
+def get_child_classification(
+    conn: sqlite3.Connection, fingerprint: str
+) -> dict | None:
+    row = conn.execute(
+        """
+        SELECT relevant, age_min, age_max, confidence, reason, classified_at
+        FROM child_classifications
+        WHERE fingerprint=?
+        """,
+        (fingerprint,),
+    ).fetchone()
+    if not row:
+        return None
+    return {
+        "relevant": bool(row[0]),
+        "age_min": row[1],
+        "age_max": row[2],
+        "confidence": row[3],
+        "reason": row[4],
+        "classified_at": row[5],
+    }
+
+
+def save_child_classification(
+    conn: sqlite3.Connection,
+    fingerprint: str,
+    *,
+    relevant: bool,
+    age_min: int | None = None,
+    age_max: int | None = None,
+    confidence: float | None = None,
+    reason: str | None = None,
+) -> None:
+    conn.execute(
+        """
+        INSERT INTO child_classifications
+          (fingerprint, relevant, age_min, age_max, confidence, reason, classified_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(fingerprint) DO UPDATE SET
+          relevant=excluded.relevant,
+          age_min=excluded.age_min,
+          age_max=excluded.age_max,
+          confidence=excluded.confidence,
+          reason=excluded.reason,
+          classified_at=excluded.classified_at
+        """,
+        (
+            fingerprint,
+            1 if relevant else 0,
+            age_min,
+            age_max,
+            confidence,
+            (reason or "")[:500],
+            _now_utc_iso(),
+        ),
+    )
+
+
 def list_events_for_upcoming_digest(
     conn: sqlite3.Connection,
     *,
@@ -631,6 +702,10 @@ def list_events_for_upcoming_digest(
         SELECT fingerprint, source_id, title, start_at, venue, url, city, raw_date_text, first_seen_at
         FROM events
         WHERE start_at IS NOT NULL
+          AND EXISTS (
+              SELECT 1 FROM child_classifications cc
+              WHERE cc.fingerprint = events.fingerprint AND cc.relevant = 1
+          )
           AND start_at >= ?
           AND start_at <= ?
         ORDER BY start_at ASC
@@ -644,6 +719,10 @@ def list_events_for_upcoming_digest(
         SELECT fingerprint, source_id, title, start_at, venue, url, city, raw_date_text, first_seen_at
         FROM events
         WHERE start_at IS NULL
+          AND EXISTS (
+              SELECT 1 FROM child_classifications cc
+              WHERE cc.fingerprint = events.fingerprint AND cc.relevant = 1
+          )
           AND first_seen_at >= ?
         ORDER BY first_seen_at DESC
         LIMIT ?

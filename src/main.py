@@ -26,6 +26,7 @@ from .dedupe import (
     should_skip_cross_source_duplicate,
 )
 from .exclusions import filter_out_excluded_events
+from .child_filter import classify_event
 from .health import should_admin_alert
 from .models import Event, Source
 from .storage import (
@@ -608,10 +609,28 @@ def main() -> int:
                 total_ok += 1
 
                 new_for_source = 0
+                child_rejected = 0
                 for ev in events:
                     if should_skip_cross_source_duplicate(ev, cross_run_seen, tzinfo):
                         continue
                     fp = fingerprint(ev)
+                    child_decision = classify_event(
+                        conn,
+                        session,
+                        ev,
+                        fp,
+                        verify_ssl=src.verify_ssl,
+                    )
+                    if not child_decision.relevant:
+                        child_rejected += 1
+                        log.info(
+                            "[%s] child filter: dropped title=%r confidence=%.2f reason=%s",
+                            src.id,
+                            _short(ev.title, 120),
+                            child_decision.confidence,
+                            _short(child_decision.reason, 180),
+                        )
+                        continue
                     if insert_event_if_new(conn, fp, ev):
                         cross_run_seen.append(ev)
                         new_events += 1
@@ -642,10 +661,11 @@ def main() -> int:
                         post_queue.append((when_dt, msg, ev, bool(src.verify_ssl)))
 
                 log.info(
-                    "[%s] parsed=%d kept=%d new=%d",
+                    "[%s] parsed=%d kept=%d child_rejected=%d new=%d",
                     src.id,
                     len(events_raw),
                     len(events),
+                    child_rejected,
                     new_for_source,
                 )
 
