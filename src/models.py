@@ -15,7 +15,7 @@ class Source:
     verify_ssl: bool = True
     # For `parse_generic_links` (and parsers that delegate to it): max `<a href>` rows scanned.
     link_limit: int | None = None
-    # For paginated sources: maximum number of pages to fetch.
+    # Optional per-source page cap for paginated wroclaw.pl/go sources.
     max_pages: int | None = None
 
 
