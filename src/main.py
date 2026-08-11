@@ -130,6 +130,11 @@ def _load_sources(path: str) -> list[Source]:
         link_limit: int | None = None
         if s.get("link_limit") is not None:
             link_limit = int(s["link_limit"])
+
+        max_pages: int | None = None
+        if s.get("max_pages") is not None:
+            max_pages = max(1, min(30, int(s["max_pages"])))
+
         sources.append(
             Source(
                 id=str(s["id"]),
@@ -139,6 +144,7 @@ def _load_sources(path: str) -> list[Source]:
                 enabled=bool(s.get("enabled", True)),
                 verify_ssl=bool(s.get("verify_ssl", True)),
                 link_limit=link_limit,
+                max_pages=max_pages,
             )
         )
     return sources
@@ -458,7 +464,11 @@ def main() -> int:
                 http_for_health: int = 200
 
                 if src.kind == "wroclaw_go":
-                    max_pages = max(1, min(30, int(os.environ.get("WROCLAW_GO_MAX_PAGES", "30"))))
+                    max_pages = (
+                        src.max_pages
+                        if src.max_pages is not None
+                        else max(1, min(30, int(os.environ.get("WROCLAW_GO_MAX_PAGES", "30"))))
+                    )
                     failed_first = False
                     for page in range(1, max_pages + 1):
                         page_url = _wroclaw_go_page_url(src.url, page)
