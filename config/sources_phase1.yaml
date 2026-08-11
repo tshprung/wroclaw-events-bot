@@ -252,6 +252,7 @@ sources:
     url: https://www.wroclaw.pl/go/wydarzenia/dla-kogo/dla-dzieci
     kind: wroclaw_go
     enabled: true
+    max_pages: 1
 
   - id: wroclaw_go_zajecia_dla_dzieci
     name: wroclaw.pl/go (Zajęcia dla dzieci)
