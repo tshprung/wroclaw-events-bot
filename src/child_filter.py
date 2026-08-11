@@ -182,8 +182,12 @@ PAGE TEXT:
             timeout=(10, 45),
         )
         if r.status_code >= 400:
-            log.warning("Child-event LLM API error: status=%s body=%s",r.status_code,r.text[:1000],)
-           return None
+            log.warning(
+                "Child-event LLM API error: status=%s body=%s",
+                r.status_code,
+                r.text[:1000],
+            )
+            return None
         body = r.json()
         content = body["choices"][0]["message"]["content"]
         data = json.loads(content)
