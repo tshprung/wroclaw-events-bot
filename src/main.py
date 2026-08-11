@@ -4,6 +4,7 @@ import logging
 import os
 import pathlib
 import sqlite3
+import time
 import uuid
 from datetime import datetime, time as dt_time, timedelta, timezone
 
@@ -130,11 +131,9 @@ def _load_sources(path: str) -> list[Source]:
         link_limit: int | None = None
         if s.get("link_limit") is not None:
             link_limit = int(s["link_limit"])
-
         max_pages: int | None = None
         if s.get("max_pages") is not None:
             max_pages = max(1, min(30, int(s["max_pages"])))
-
         sources.append(
             Source(
                 id=str(s["id"]),
@@ -395,6 +394,7 @@ def main() -> int:
         return 0
 
     run_id = str(uuid.uuid4())
+    run_started = time.perf_counter()
     log.info("Run %s starting at %s", run_id, now_local.isoformat())
 
     session = requests.Session()
@@ -459,16 +459,16 @@ def main() -> int:
             if src.id in auto_disabled_ids or src.id in backoff_ids:
                 continue
             try:
+                source_started = time.perf_counter()
+                child_filter_started = 0.0
+                child_filter_seconds = 0.0
                 parser = parser_for_kind(src.kind)
                 events_raw: list[Event] = []
                 http_for_health: int = 200
 
                 if src.kind == "wroclaw_go":
-                    max_pages = (
-                        src.max_pages
-                        if src.max_pages is not None
-                        else max(1, min(30, int(os.environ.get("WROCLAW_GO_MAX_PAGES", "30"))))
-                    )
+                    default_max_pages = max(1, min(30, int(os.environ.get("WROCLAW_GO_MAX_PAGES", "30"))))
+                    max_pages = src.max_pages if src.max_pages is not None else default_max_pages
                     failed_first = False
                     for page in range(1, max_pages + 1):
                         page_url = _wroclaw_go_page_url(src.url, page)
@@ -631,6 +631,7 @@ def main() -> int:
                     if should_skip_cross_source_duplicate(ev, cross_run_seen, tzinfo):
                         continue
                     fp = fingerprint(ev)
+                    child_started = time.perf_counter()
                     child_decision = classify_event(
                         conn,
                         session,
@@ -638,6 +639,7 @@ def main() -> int:
                         fp,
                         verify_ssl=src.verify_ssl,
                     )
+                    child_filter_seconds += time.perf_counter() - child_started
                     if not child_decision.relevant:
                         child_rejected += 1
                         log.info(
@@ -677,13 +679,17 @@ def main() -> int:
                                 when_dt = datetime.combine(r.day, dt_time.min, tzinfo=now_local.tzinfo)
                         post_queue.append((when_dt, msg, ev, bool(src.verify_ssl)))
 
+                source_seconds = time.perf_counter() - source_started
                 log.info(
-                    "[%s] parsed=%d kept=%d child_rejected=%d new=%d",
+                    "[%s] parsed=%d kept=%d child_rejected=%d new=%d "
+                    "time=%.2fs child_filter_time=%.2fs",
                     src.id,
                     len(events_raw),
                     len(events),
                     child_rejected,
                     new_for_source,
+                    source_seconds,
+                    child_filter_seconds,
                 )
 
                 conn.commit()
@@ -698,7 +704,8 @@ def main() -> int:
                 )
                 conn.commit()
                 total_fail += 1
-                log.warning("[%s] request error: %s", src.id, str(e)[:220])
+                elapsed = time.perf_counter() - source_started if 'source_started' in locals() else 0.0
+                log.warning("[%s] request error after %.2fs: %s", src.id, elapsed, str(e)[:220])
             except Exception as e:
                 _record_source_failure(
                     conn,
@@ -709,7 +716,8 @@ def main() -> int:
                 )
                 conn.commit()
                 total_fail += 1
-                log.exception("[%s] failed: %s", src.id, e)
+                elapsed = time.perf_counter() - source_started if 'source_started' in locals() else 0.0
+                log.exception("[%s] failed after %.2fs: %s", src.id, elapsed, e)
 
         def _queue_sort_key(it: tuple[datetime | None, str, Event, bool]) -> tuple[int, datetime]:
             dtv = it[0]
@@ -834,12 +842,14 @@ def main() -> int:
                     if removed:
                         log.info("Pruned %d past event row(s) from DB (grace=%sh)", removed, grace_h)
 
+        run_seconds = time.perf_counter() - run_started
         log.info(
-            "Run done. sources_ok=%d sources_failed=%d new_events=%d posts_sent=%d",
+            "Run done. sources_ok=%d sources_failed=%d new_events=%d posts_sent=%d total_time=%.2fs",
             total_ok,
             total_fail,
             new_events,
             posts_sent,
+            run_seconds,
         )
         return 0
     finally:
