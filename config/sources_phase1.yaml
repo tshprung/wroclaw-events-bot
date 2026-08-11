@@ -1,5 +1,8 @@
 version: 1
 sources:
+  # Temporarily disabled after source-quality review. These sources either duplicate
+  # better feeds, produce substantial non-event/navigation noise, or are one-off pages.
+  # Keep entries here so they can be re-enabled easily if needed.
   - id: wroclaw_go_all
     name: wroclaw.pl/go all events
     url: https://www.wroclaw.pl/go/wydarzenia/wszystkie
@@ -23,14 +26,14 @@ sources:
     name: wroclaw.pl/go — Festiwal Kolorów / Holi 2026 (strona wydarzenia)
     url: https://www.wroclaw.pl/go/wydarzenia/rozrywka/1409046-festiwal-kolorow-wroclaw-holi-celebration-2026
     kind: wroclaw_go
-    enabled: true
+    enabled: false
 
   - id: wroclaw_go_weekend
     name: wroclaw.pl/go weekend summaries
     url: https://www.wroclaw.pl/go/zestawienia
     kind: generic_links
     link_limit: 200
-    enabled: true
+    enabled: false
 
   - id: wydarzenia_wroclaw
     name: wydarzenia.wroclaw.pl
@@ -43,13 +46,13 @@ sources:
     name: PIK Wrocław
     url: https://pik.wroclaw.pl/
     kind: pik
-    enabled: true
+    enabled: false
 
   - id: pik_holi_festival_wroclaw
     name: PIK — Holi / Festiwal Kolorów (strona wydarzenia)
     url: https://pik.wroclaw.pl/holi-festival-swieto-kolorow-we-wroclawiu/
     kind: pik
-    enabled: true
+    enabled: false
 
   - id: hala_stulecia
     name: Hala Stulecia
@@ -69,7 +72,7 @@ sources:
     url: https://tarczynskiarenawroclaw.pl/events/
     kind: tarczynski_arena
     link_limit: 300
-    enabled: true
+    enabled: false
 
   # National Forum of Music — adult classical/pop concert repertuar (operator preference).
   - id: nfm_repertuar
@@ -135,7 +138,7 @@ sources:
     url: https://wroclaw.travel/en/event-calendar/
     kind: wroclaw_travel_calendar
     link_limit: 300
-    enabled: true
+    enabled: false
 
   # Adult drama / musical-theatre venue scrapes (operator preference); Teatr Lalek stays on.
   - id: opera_wroclawska
@@ -166,7 +169,7 @@ sources:
     name: Impart (wydarzenia)
     url: https://impart.pl/
     kind: generic_links
-    enabled: true
+    enabled: false
 
   - id: kino_nh
     name: Kino Nowe Horyzonty
