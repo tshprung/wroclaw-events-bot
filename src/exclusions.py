@@ -283,6 +283,18 @@ def _wroclaw_pl_specific_hub_url(url: str) -> bool:
     return path in _WROCLAW_PL_NON_EVENT_PATHS
 
 
+def _hydropolis_non_event_url(url: str) -> bool:
+    """Hydropolis news index and its cookie/settings anchors are not events."""
+    try:
+        p = urlparse((url or "").strip())
+    except ValueError:
+        return False
+    if "hydropolis.pl" not in (p.netloc or "").lower():
+        return False
+    path = (p.path or "").strip().rstrip("/").lower()
+    return path == "/blog/aktualnosci"
+
+
 def _hydropolis_tag_url(url: str) -> bool:
     try:
         p = urlparse((url or "").strip())
@@ -310,6 +322,8 @@ def event_is_excluded(ev: Event) -> bool:
     if not u_raw.lower().startswith("https://"):
         return True
     u = u_raw.lower()
+    if _hydropolis_non_event_url(u_raw):
+        return True
     if _hydropolis_tag_url(u_raw):
         return True
     if _wroclawguide_listing_hub_url(u_raw):
