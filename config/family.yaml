@@ -1,0 +1,33 @@
+version: 1
+ages_months: [18, 60]
+# Either child may match. Weekdays/weekends, language, price and naps are unrestricted.
+# This is a configurable vicinity list, NOT a promise of a 30-minute journey.
+# Actual driving time requires a departure point and a routing service.
+nearby_localities:
+  - Wrocław
+  - Bielany Wrocławskie
+  - Wysoka
+  - Ślęza
+  - Radwanice
+  - Siechnice
+  - Święta Katarzyna
+  - Żerniki Wrocławskie
+  - Smolec
+  - Mokronos Dolny
+  - Mokronos Górny
+  - Kąty Wrocławskie
+  - Długołęka
+  - Mirków
+  - Kiełczów
+  - Dobrzykowice
+  - Nadolice Wielkie
+  - Kamieniec Wrocławski
+  - Czernica
+  - Łany
+  - Psary
+  - Szymanów
+  - Kryniczno
+  - Wisznia Mała
+  - Oborniki Śląskie
+  - Miękinia
+  - Lutynia

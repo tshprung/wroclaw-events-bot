@@ -363,6 +363,10 @@ def connect(db_path: str) -> sqlite3.Connection:
     conn = sqlite3.connect(db_path)
     conn.execute("PRAGMA foreign_keys=ON;")
     conn.executescript(SCHEMA)
+    columns = {row[1] for row in conn.execute("PRAGMA table_info(child_classifications)")}
+    for name, default in (("policy_version", "''"), ("decision_json", "'{}'")):
+        if name not in columns:
+            conn.execute(f"ALTER TABLE child_classifications ADD COLUMN {name} TEXT NOT NULL DEFAULT {default}")
     _collapse_legacy_go_fingerprints(conn)
     _collapse_legacy_kraj_fingerprints(conn)
     _collapse_legacy_ww_fingerprints(conn)
@@ -674,15 +678,15 @@ def set_bot_meta_value(conn: sqlite3.Connection, key: str, value: str) -> None:
 
 
 def get_child_classification(
-    conn: sqlite3.Connection, fingerprint: str
+    conn: sqlite3.Connection, fingerprint: str, *, policy_version: str = ""
 ) -> dict | None:
     row = conn.execute(
         """
-        SELECT relevant, age_min, age_max, confidence, reason, classified_at
+        SELECT relevant, age_min, age_max, confidence, reason, classified_at, decision_json
         FROM child_classifications
-        WHERE fingerprint=?
+        WHERE fingerprint=? AND policy_version=?
         """,
-        (fingerprint,),
+        (fingerprint, policy_version),
     ).fetchone()
     if not row:
         return None
@@ -693,6 +697,7 @@ def get_child_classification(
         "confidence": row[3],
         "reason": row[4],
         "classified_at": row[5],
+        "decision_json": row[6],
     }
 
 
@@ -705,19 +710,23 @@ def save_child_classification(
     age_max: int | None = None,
     confidence: float | None = None,
     reason: str | None = None,
+    policy_version: str = "",
+    decision_json: str = "{}",
 ) -> None:
     conn.execute(
         """
         INSERT INTO child_classifications
-          (fingerprint, relevant, age_min, age_max, confidence, reason, classified_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+          (fingerprint, relevant, age_min, age_max, confidence, reason, classified_at, policy_version, decision_json)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(fingerprint) DO UPDATE SET
           relevant=excluded.relevant,
           age_min=excluded.age_min,
           age_max=excluded.age_max,
           confidence=excluded.confidence,
           reason=excluded.reason,
-          classified_at=excluded.classified_at
+          classified_at=excluded.classified_at,
+          policy_version=excluded.policy_version,
+          decision_json=excluded.decision_json
         """,
         (
             fingerprint,
@@ -727,6 +736,8 @@ def save_child_classification(
             confidence,
             (reason or "")[:500],
             _now_utc_iso(),
+            policy_version,
+            decision_json,
         ),
     )
 

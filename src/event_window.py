@@ -15,7 +15,7 @@ from .models import Event
 def _fold_pl(s: str) -> str:
     """Lowercase and strip Polish diacritics for robust keyword matching."""
     s = unicodedata.normalize("NFKD", s.casefold())
-    return "".join(c for c in s if not unicodedata.combining(c))
+    return "".join(c for c in s if not unicodedata.combining(c)).replace("ł", "l")
 
 
 _WD_NAME_TO_ISO = {
@@ -151,11 +151,16 @@ def _parse_meetup_title_when(title: str, now: datetime) -> _Resolved | None:
     resolved = _finalize_calendar_day(mon, dom, yr, d_now)
     if resolved is None:
         return None
-    # Whole-day resolution avoids mis-parsing 12h times in "6:00 PM".
-    return _Resolved(resolved, None)
+    return _Resolved(resolved, _extract_time_portion(t))
 
 
 def _extract_time_portion(text: str) -> time | None:
+    ampm = re.search(r"\b(\d{1,2}):(\d{2})\s*(AM|PM)\b", text, re.I)
+    if ampm:
+        h, mi = int(ampm[1]), int(ampm[2])
+        if not (1 <= h <= 12 and 0 <= mi <= 59):
+            return None
+        return time(h % 12 + (12 if ampm[3].upper() == "PM" else 0), mi)
     m = _TIME_O_CLOCK.search(text)
     if not m:
         m = _TIME_COMPACT.search(text)

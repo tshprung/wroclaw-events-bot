@@ -78,13 +78,6 @@ def _meetup_outside_wroclaw(ev: Event) -> bool:
 # wroclaw.pl/go category segment — e.g. /go/wydarzenia/sztuka/123-slug
 _DEFAULT_URL_PARTS: frozenset[str] = frozenset(
     {
-        "/go/wydarzenia/sztuka/",
-        "muzeumpanatadeusza",
-        "mnwr.pl",
-        "panoramaraclawicka.pl",
-        "muzeumarchitektury.pl",
-        "muzeum.miejskie.wroclaw",
-        "bwa.wroc.pl",
         # Static info pages, not events.
         "zoo.wroclaw.pl/zwiedzanie/godziny-otwarcia",
         # Senior-care site at staryklasztor.pl (not Wrocław club); drop if linked elsewhere.
@@ -122,8 +115,6 @@ _DEFAULT_URL_PARTS: frozenset[str] = frozenset(
         "wroclaw.pl/sport/aktualnosci-sport-i-rekreacja-wroclaw",
         "wroclaw.pl/sport/rekreacja-we-wroclawiu",
         # wroclaw.pl/go and wydarzenia.wroclaw.pl topic hubs (not single events).
-        "wroclaw.pl/go/wydarzenia/teatr",
-        "wroclaw.pl/go/wydarzenia/muzyka",
         # wroclaw.pl/go: "Add place" form (not an event).
         "wroclaw.pl/go/dodaj-miejsce",
         # wroclaw.pl/go and dla-mieszkanca admin / legal pages (not events).
@@ -139,15 +130,7 @@ _DEFAULT_URL_PARTS: frozenset[str] = frozenset(
     }
 )
 
-_DEFAULT_VENUE_PARTS: frozenset[str] = frozenset(
-    {
-        "muzeum pana tadeusza",
-        "muzeum narodowe",
-        "panorama raclawicka",
-        "muzeum architektury",
-        "bwa wroclaw",
-    }
-)
+_DEFAULT_VENUE_PARTS: frozenset[str] = frozenset()
 
 _DEFAULT_TITLE_PARTS: frozenset[str] = frozenset(
     {
@@ -338,14 +321,13 @@ def event_is_excluded(ev: Event) -> bool:
         if frag in u:
             return True
     # Operator policy: drop by URL keyword (case-insensitive via `u`).
-    for kw in ("koncert", "teatr", "jazz", "dating"):
+    for kw in ("dating",):
         if kw in u:
             return True
 
     if _is_online_event(ev):
         return True
-    if _meetup_outside_wroclaw(ev):
-        return True
+    # Actual locality (including nearby towns) is verified by the family classifier.
     if _inyourpocket_non_event(ev):
         return True
 
