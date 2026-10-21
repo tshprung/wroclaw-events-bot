@@ -13,12 +13,38 @@ log = logging.getLogger(__name__)
 _last_send_mono: float = 0.0
 
 
+def message_chunks(text: str, limit: int = 4096) -> list[str]:
+    """Split plain-text digests at event boundaries where possible."""
+    chunks: list[str] = []
+    current = ""
+    for block in text.split("\n\n"):
+        while len(block) > limit:
+            if current:
+                chunks.append(current)
+                current = ""
+            chunks.append(block[:limit])
+            block = block[limit:]
+        joined = f"{current}\n\n{block}" if current else block
+        if len(joined) > limit:
+            chunks.append(current)
+            current = block
+        else:
+            current = joined
+    if current:
+        chunks.append(current)
+    return chunks
+
+
 @dataclass(frozen=True)
 class TelegramClient:
     token: str
 
     def send_message(self, chat_id: str, text: str, *, disable_web_preview: bool = True) -> None:
         global _last_send_mono
+        if len(text) > 4096:
+            for chunk in message_chunks(text):
+                self.send_message(chat_id, chunk, disable_web_preview=disable_web_preview)
+            return
         url = f"https://api.telegram.org/bot{self.token}/sendMessage"
         payload = {
             "chat_id": chat_id,
@@ -103,7 +129,7 @@ class TelegramClient:
         )
 
 
-def format_event_message(title: str, when: str | None, venue: str | None, url: str) -> str:
+def format_event_message(title: str, when: str | None, venue: str | None, url: str, *, suitability: str | None = None) -> str:
     parts: list[str] = [title]
     meta: list[str] = []
     if when:
@@ -112,5 +138,7 @@ def format_event_message(title: str, when: str | None, venue: str | None, url: s
         meta.append(venue)
     if meta:
         parts.append(" — ".join(meta))
+    if suitability:
+        parts.append(suitability)
     parts.append(url)
     return "\n".join(parts)

@@ -27,7 +27,7 @@ from .dedupe import (
     should_skip_cross_source_duplicate,
 )
 from .exclusions import filter_out_excluded_events
-from .child_filter import classify_event
+from .child_filter import ChildDecision, classify_event
 from .health import should_admin_alert
 from .models import Event, Source
 from .storage import (
@@ -262,6 +262,14 @@ def _dedupe_events_by_url(events: list[Event]) -> list[Event]:
     return out
 
 
+def _format_family_event(ev: Event, now_local: datetime, decision: ChildDecision) -> str:
+    when = format_event_when_display(ev, now_local.tzinfo)
+    resolved = resolve_when(ev, now_local)
+    if resolved is None or resolved.tm is None:
+        when = f"{when + ' · ' if when else ''}Start time unconfirmed; check event page"
+    return format_event_message(ev.title, when, ev.venue, ev.url, suitability=decision.summary())
+
+
 def _maybe_send_upcoming_digest(
     *,
     conn: sqlite3.Connection,
@@ -308,6 +316,12 @@ def _maybe_send_upcoming_digest(
         limit_recent_unknown=800,
     )
 
+    candidates = filter_events_in_window(candidates, now_local)
+    candidates, _ = filter_out_excluded_events(candidates, now_local)
+    decisions: dict[str, ChildDecision] = {}
+    session = requests.Session()
+    verify_by_source = {s.id: s.verify_ssl for s in sources}
+
     def _in_window(ev: Event) -> tuple[datetime | None, Event] | None:
         if _should_skip_due_to_min_notice(ev, now_local):
             return None
@@ -316,7 +330,8 @@ def _maybe_send_upcoming_digest(
             return None
         dtv: datetime
         if r.tm is None:
-            dtv = datetime.combine(r.day, dt_time.min, tzinfo=now_local.tzinfo)
+            # Keep today's date-only items, but clearly mark the time as unconfirmed.
+            dtv = max(now_local, datetime.combine(r.day, dt_time.min, tzinfo=now_local.tzinfo))
         else:
             dtv = datetime.combine(r.day, r.tm, tzinfo=now_local.tzinfo)
         if not (now_local <= dtv <= end_local):
@@ -333,6 +348,11 @@ def _maybe_send_upcoming_digest(
         sig = fingerprint(ev2)
         if sig in seen_sig:
             continue
+        decision = classify_event(conn, session, ev2, sig,
+                                  verify_ssl=verify_by_source.get(ev2.source_id, True))
+        if not decision.relevant:
+            continue
+        decisions[sig] = decision
         seen_sig.add(sig)
         enriched.append((dtv, ev2))
 
@@ -344,12 +364,7 @@ def _maybe_send_upcoming_digest(
     enriched.sort(key=lambda x: x[0])
     sliced = enriched[:max_lines]
     lines = [
-        format_event_message(
-            title=ev.title,
-            when=format_event_when_display(ev, now_local.tzinfo),
-            venue=ev.venue,
-            url=ev.url,
-        )
+        _format_family_event(ev, now_local, decisions[fingerprint(ev)])
         for _dtv, ev in sliced
     ]
     msg = f"Upcoming events (next {window_days} days): {len(lines)}\n\n" + "\n\n".join(lines)
@@ -628,8 +643,6 @@ def main() -> int:
                 new_for_source = 0
                 child_rejected = 0
                 for ev in events:
-                    if should_skip_cross_source_duplicate(ev, cross_run_seen, tzinfo):
-                        continue
                     fp = fingerprint(ev)
                     child_started = time.perf_counter()
                     child_decision = classify_event(
@@ -650,6 +663,8 @@ def main() -> int:
                             _short(child_decision.reason, 180),
                         )
                         continue
+                    if should_skip_cross_source_duplicate(ev, cross_run_seen, tzinfo):
+                        continue
                     if insert_event_if_new(conn, fp, ev):
                         cross_run_seen.append(ev)
                         new_events += 1
@@ -663,12 +678,7 @@ def main() -> int:
                                 _short(ev.title, 120),
                             )
                             continue
-                        msg = format_event_message(
-                            title=ev.title,
-                            when=format_event_when_display(ev, tzinfo),
-                            venue=ev.venue,
-                            url=ev.url,
-                        )
+                        msg = _format_family_event(ev, now_local, child_decision)
                         r = resolve_when(ev, now_local)
                         when_dt: datetime | None = None
                         if r is not None:

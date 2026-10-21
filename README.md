@@ -12,7 +12,37 @@ Collect upcoming events in Wrocław from ~30 **HTTP-only** sources (no login/cap
   - posts only truly-new events
   - records per-source health (timeouts, 403/429 blocks, parse errors, empty results)
 
-## Local run
+## Family preferences
+
+- Known event start times must be **06:00–17:30 inclusive**, in `TIMEZONE`
+  (default `Europe/Warsaw`). Finish time and return travel are unrestricted.
+  Configure these bounds in `config/blocklist.yaml`; existing
+  `EVENT_BLOCK_START_BEFORE` / `EVENT_BLOCK_START_AFTER` environment overrides still apply.
+- `config/family.yaml` defaults to children aged **18 and 60 months**. An event
+  may suit **either child**. Notifications identify matching children and explain why.
+  No weekday, nap, price, or language restrictions are applied.
+- Theatre, concerts, and museum activities are evaluated for child suitability;
+  they are no longer rejected simply because of their category or venue.
+- The configurable nearby-locality list approximates the Wrocław vicinity.
+  **It is not a verified 30-minute driving radius.** Travel time depends on the
+  departure point and traffic; nearby results explicitly say drive time is unverified.
+  Unknown or out-of-list locations are withheld. The classifier must quote location evidence.
+- Events with unknown start times remain eligible but are explicitly labelled
+  **Start time unconfirmed**. Set `EVENT_WINDOW_INCLUDE_UNDATED=0` to exclude
+  events with no resolvable date (date-only events may still have unknown times).
+  Generic link sources still need dedicated parsers to reliably extract performance times.
+- `OPENAI_API_KEY` enables detailed age and locality classification;
+  `CHILD_FILTER_MODEL` defaults to `gpt-5-mini`. Without a key, only explicit
+  title age ranges with a named allowed locality in the venue can qualify.
+  Model/network failures are not cached. Cached decisions are invalidated when
+  family preferences change, and legacy 0–6 classifications are re-evaluated.
+- The daily upcoming digest applies the same preferences as new-event posts.
+  Long digests are split into messages within Telegram's text limit.
+
+Run the offline regression suite with `python -m unittest discover -s tests -v`.
+Tests use mocked HTTP/classifier responses and never send Telegram messages.
+
+## Local setup
 
 Create a venv and install deps:
 
@@ -27,6 +57,7 @@ Create `.env` (example):
 TELEGRAM_BOT_TOKEN=123:abc
 TELEGRAM_CHANNEL_ID=-1001234567890
 ADMIN_TELEGRAM_ID=12345678
+OPENAI_API_KEY=your-key
 DB_PATH=./data/events.db
 TIMEZONE=Europe/Warsaw
 DRY_RUN=1
