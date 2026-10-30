@@ -10,6 +10,24 @@ schedule:
 # Fields on a rule are AND-ed; use title_all when every fragment must appear in the title.
 rules:
   # Series-level rules deliberately omit event IDs/dates so future weekly listings stay blocked.
+  - note: Unwanted recurring Tajemnice Uniwersytetu Wrocławskiego tours
+    title_all:
+      - tajemnice
+      - uniwersytetu
+      - wroclawskiego
+
+  - note: Unwanted recurring Tajemnice Uniwersytetu Wrocławskiego tours (URL)
+    url_contains: tajemnice-uniwersytetu-wroclawskiego
+
+  - note: Unwanted recurring Tajemnice Wrocławskiego Ratusza tours
+    title_all:
+      - tajemnice
+      - wroclawskiego
+      - ratusza
+
+  - note: Unwanted recurring Tajemnice Wrocławskiego Ratusza tours (URL)
+    url_contains: tajemnice-wroclawskiego-ratusza
+
   - note: Unwanted recurring basketball development classes (all dates/sources)
     title_all:
       - ogolnorozwojow

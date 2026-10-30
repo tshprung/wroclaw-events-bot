@@ -99,7 +99,9 @@ class SeriesAndDescriptionTests(unittest.TestCase):
     def test_blocks_both_series_across_sources_and_future_weeks(self):
         cfg = load_blocklist()
         titles = ['Bezpłatne zajęcia ogólnorozwojowe z elementami koszykówki dla dzieci od 2 roku życia',
-                  'Warsztaty dla dzieci. Mały geolog: na tropie dinozaurów i minerałów.']
+                  'Warsztaty dla dzieci. Mały geolog: na tropie dinozaurów i minerałów.',
+                  '„Tajemnice Uniwersytetu Wrocławskiego" – wycieczka po Wrocławiu',
+                  '„Tajemnice Wrocławskiego Ratusza” – wycieczka z przewodnikiem']
         for title in titles:
             for days in [0, 7, 21]:
                 for ev in [replace(PARADE, title=title, start_at=START + timedelta(days=days), url='https://example.org/new-id'),
@@ -108,11 +110,14 @@ class SeriesAndDescriptionTests(unittest.TestCase):
                         self.assertTrue(event_blocked(ev, NOW, cfg))
 
     def test_block_series_by_url_even_with_missing_title(self):
-        for slug in ['maly-geolog-123', 'bezplatne-zajecia-ogolnorozwojowe-z-elementami-koszykowki-999']:
+        for slug in ['maly-geolog-123', 'bezplatne-zajecia-ogolnorozwojowe-z-elementami-koszykowki-999',
+                     '1391238-tajemnice-uniwersytetu-wroclawskiego-wycieczka-po-wroclawiu',
+                     '1393146-tajemnice-wroclawskiego-ratusza-wycieczka-z-przewodnikiem']:
             self.assertTrue(event_blocked(replace(PARADE, title='Wydarzenie', url='https://example.org/' + slug), NOW))
 
     def test_other_dinosaur_or_sports_activities_remain_eligible(self):
-        for title in ['Rodzinny piknik sportowy', 'Dinozaury w muzeum', 'Rodzinny mecz koszykówki']:
+        for title in ['Rodzinny piknik sportowy', 'Dinozaury w muzeum', 'Rodzinny mecz koszykówki',
+                      'Rodzinne warsztaty na Uniwersytecie Wrocławskim', 'Rodzinne zwiedzanie Ratusza']:
             self.assertFalse(event_blocked(replace(PARADE, title=title), NOW))
 
     def test_description_replaces_suitability_reasoning(self):
