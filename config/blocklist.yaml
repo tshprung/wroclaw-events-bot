@@ -9,6 +9,21 @@ schedule:
 # Add your own rules here (case-insensitive; Polish ł matches l).
 # Fields on a rule are AND-ed; use title_all when every fragment must appear in the title.
 rules:
+  # Series-level rules deliberately omit event IDs/dates so future weekly listings stay blocked.
+  - note: Unwanted recurring basketball development classes (all dates/sources)
+    title_all:
+      - ogolnorozwojow
+      - koszykow
+
+  - note: Unwanted recurring basketball development classes (URL)
+    url_contains: zajecia-ogolnorozwojowe-z-elementami-koszykowki
+
+  - note: Unwanted recurring Mały geolog workshops (all dates/sources)
+    title_contains: maly geolog
+
+  - note: Unwanted recurring Mały geolog workshops (URL)
+    url_contains: maly-geolog
+
   - note: Recurring walk — Wrocław w pigułce
     url_contains: wroclaw-w-pigulce
 

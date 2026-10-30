@@ -23,6 +23,7 @@ from .event_window import (
 from .dedupe import (
     collapse_wroclaw_go_same_detail_url,
     collapse_wroclaw_go_twin_listings,
+    collapse_event_occurrences,
     fingerprint,
     should_skip_cross_source_duplicate,
 )
@@ -30,6 +31,7 @@ from .exclusions import filter_out_excluded_events
 from .child_filter import ChildDecision, classify_event
 from .health import should_admin_alert
 from .models import Event, Source
+from .event_identity import normalize_event
 from .storage import (
     auto_disable_failure_threshold,
     connect,
@@ -263,8 +265,11 @@ def _dedupe_events_by_url(events: list[Event]) -> list[Event]:
 
 
 def _format_family_event(ev: Event, now_local: datetime, decision: ChildDecision) -> str:
+    ev = normalize_event(ev)
     when = format_event_when_display(ev, now_local.tzinfo)
     resolved = resolve_when(ev, now_local)
+    if resolved is not None and resolved.tm is not None:
+        when = datetime.combine(resolved.day, resolved.tm).strftime("%d.%m.%Y %H:%M")
     if resolved is None or resolved.tm is None:
         when = f"{when + ' · ' if when else ''}Start time unconfirmed; check event page"
     return format_event_message(ev.title, when, ev.venue, ev.url, suitability=decision.summary())
@@ -316,6 +321,7 @@ def _maybe_send_upcoming_digest(
         limit_recent_unknown=800,
     )
 
+    candidates = collapse_event_occurrences(candidates, now_local.tzinfo)
     candidates = filter_events_in_window(candidates, now_local)
     candidates, _ = filter_out_excluded_events(candidates, now_local)
     decisions: dict[str, ChildDecision] = {}
@@ -643,6 +649,9 @@ def main() -> int:
                 new_for_source = 0
                 child_rejected = 0
                 for ev in events:
+                    # Dedupe against persisted history as well as earlier sources in this run.
+                    if should_skip_cross_source_duplicate(ev, cross_run_seen, tzinfo):
+                        continue
                     fp = fingerprint(ev)
                     child_started = time.perf_counter()
                     child_decision = classify_event(
@@ -662,8 +671,6 @@ def main() -> int:
                             child_decision.confidence,
                             _short(child_decision.reason, 180),
                         )
-                        continue
-                    if should_skip_cross_source_duplicate(ev, cross_run_seen, tzinfo):
                         continue
                     if insert_event_if_new(conn, fp, ev):
                         cross_run_seen.append(ev)

@@ -9,6 +9,7 @@ from datetime import datetime, timedelta, timezone
 
 from .dedupe import _wydarzenia_wroclaw_path_key, fingerprint
 from .models import Event
+from .event_identity import normalize_event
 
 
 SCHEMA = """
@@ -88,7 +89,7 @@ def _event_from_storage_row(r: tuple) -> Event:
             st = None
         if st is not None and st.tzinfo is None:
             st = st.replace(tzinfo=timezone.utc)
-    return Event(
+    return normalize_event(Event(
         source_id=str(source_id),
         title=str(title),
         start_at=st,
@@ -96,7 +97,7 @@ def _event_from_storage_row(r: tuple) -> Event:
         url=str(url),
         city=str(city or "Wrocław"),
         raw_date_text=raw_date_text,
-    )
+    ))
 
 
 def _collapse_legacy_xslug_fingerprints(conn: sqlite3.Connection) -> None:

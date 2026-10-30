@@ -19,7 +19,8 @@ Collect upcoming events in Wrocław from ~30 **HTTP-only** sources (no login/cap
   Configure these bounds in `config/blocklist.yaml`; existing
   `EVENT_BLOCK_START_BEFORE` / `EVENT_BLOCK_START_AFTER` environment overrides still apply.
 - `config/family.yaml` defaults to children aged **18 and 60 months**. An event
-  may suit **either child**. Notifications identify matching children and explain why.
+  may suit **either child**. Age suitability is used internally for filtering.
+  Notifications describe what happens at the event instead of explaining why it suits a child.
   No weekday, nap, price, or language restrictions are applied.
 - Theatre, concerts, and museum activities are evaluated for child suitability;
   they are no longer rejected simply because of their category or venue.
@@ -38,6 +39,23 @@ Collect upcoming events in Wrocław from ~30 **HTTP-only** sources (no login/cap
   family preferences change, and legacy 0–6 classifications are re-evaluated.
 - The daily upcoming digest applies the same preferences as new-event posts.
   Long digests are split into messages within Telegram's text limit.
+
+### Duplicate listings and unwanted series
+
+- Recover the actual title, venue and dated start time from Krajownik cards, including
+  old database rows that were stored as `Wydarzenie (Krajownik)`.
+- Match duplicate performances by normalized title, local date/time and venue across
+  sources and later runs. Short expressive titles such as `Baach!` / `BAAACH! | 3+`
+  match at the same performance time and venue; prefer the listing with explicit age information.
+  Different known showtimes/dates and numbered parts remain distinct during duplicate matching.
+- `config/blocklist.yaml` excludes the recurring basketball development classes and
+  `Mały geolog` workshop series by title and URL fragments, without date or ID restrictions.
+  Other sports, dinosaur and museum events remain eligible.
+- Descriptions come from the source page and are cached with the age/locality decision.
+  The new cache version refreshes legacy suitability explanations when a decision is needed.
+  Existing stored events and notification history are preserved.
+- Photo captions that would exceed Telegram's limit are sent as complete text messages,
+  preserving the event description and source link.
 
 Run the offline regression suite with `python -m unittest discover -s tests -v`.
 Tests use mocked HTTP/classifier responses and never send Telegram messages.

@@ -73,7 +73,7 @@ class FamilyTests(unittest.TestCase):
 
     def decision(self, **updates):
         data = dict(suitable_ages_months=[60], locality="Wrocław", location_evidence="Wrocław",
-                    confidence=0.9, reason="Workshop explicitly for preschool children")
+                    confidence=0.9, reason="Workshop explicitly for preschool children", event_description="A hands-on craft workshop.")
         data.update(updates)
         return _validate_decision(data, event(), "", PREFS)
 
@@ -84,7 +84,7 @@ class FamilyTests(unittest.TestCase):
 
     def test_nearby_and_distant_localities(self):
         data = dict(suitable_ages_months=[18], locality="Siechnice", location_evidence="Siechnice",
-                    confidence=0.9, reason="Toddler activity")
+                    confidence=0.9, reason="Toddler activity", event_description="A sensory play session.")
         match = _validate_decision(data, event(venue="Siechnice"), "", PREFS)
         self.assertTrue(match.relevant)
         self.assertIn("drive time unverified", match.summary())
@@ -93,7 +93,7 @@ class FamilyTests(unittest.TestCase):
 
     def test_default_event_city_does_not_prove_location(self):
         data = dict(suitable_ages_months=[60], locality="Wrocław", location_evidence="Wrocław",
-                    confidence=0.9, reason="Workshop")
+                    confidence=0.9, reason="Workshop", event_description="A hands-on craft workshop.")
         self.assertFalse(_validate_decision(data, event(venue=None), "", PREFS).relevant)
 
     def test_invalid_classifier_types_rejected(self):
@@ -104,7 +104,7 @@ class FamilyTests(unittest.TestCase):
 
     def test_title_age_restriction_overrides_model_match(self):
         data = dict(suitable_ages_months=[18, 60], locality="Wrocław", location_evidence="Wrocław",
-                    confidence=0.9, reason="Workshop")
+                    confidence=0.9, reason="Workshop", event_description="A hands-on craft workshop.")
         result = _validate_decision(data, event(title="Warsztaty 3-6 lat"), "", PREFS)
         self.assertEqual(result.suitable_ages_months, (60,))
 
@@ -129,7 +129,7 @@ class FamilyTests(unittest.TestCase):
         text = _format_family_event(event(start_at=None, raw_date_text="22.10.2026"), NOW,
                                   ChildDecision(True, None, None, 0.9, "Age range", (60,), "Wrocław"))
         self.assertIn("Start time unconfirmed", text)
-        self.assertIn("5-year-old", text)
+        self.assertNotIn("Why:", text)
 
     def test_message_chunk_limits_and_event_boundaries(self):
         blocks = [str(i) + "x" * 600 for i in range(30)]
@@ -203,7 +203,7 @@ class StorageAndDigestTests(unittest.TestCase):
                 settings=SimpleNamespace(dry_run=False, telegram_channel_id="test"), telegram=telegram, sources=[])
         self.assertEqual(classifier.call_count, 1)
         msg = telegram.send_message.call_args.args[1]
-        self.assertIn("5-year-old", msg)
+        self.assertNotIn("Suitable for:", msg)
         self.assertNotIn("example.org/late", msg)
 
     def test_digest_withholds_event_when_current_classification_rejects_it(self):

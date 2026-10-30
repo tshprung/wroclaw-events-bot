@@ -10,7 +10,7 @@ from dataclasses import dataclass
 import requests
 from bs4 import BeautifulSoup
 
-from .family import FamilyPreferences, age_label, fold, load_family_preferences
+from .family import FamilyPreferences, fold, load_family_preferences
 from .models import Event
 from .storage import get_child_classification, save_child_classification
 
@@ -26,19 +26,20 @@ class ChildDecision:
     reason: str
     suitable_ages_months: tuple[int, ...] = ()
     locality: str | None = None
+    event_description: str = ""
 
     def summary(self) -> str:
-        ages = ", ".join(age_label(x) for x in self.suitable_ages_months)
-        location = f" · {self.locality}" if self.locality else ""
-        vicinity = " · nearby; drive time unverified" if self.locality and fold(self.locality) != "wroclaw" else ""
-        return f"Suitable for: {ages}{location}{vicinity}\nWhy: {self.reason}"
+        description = self.event_description or "Event description unavailable; see the linked event page."
+        if self.locality and fold(self.locality) != "wroclaw":
+            description += f"\nLocation: {self.locality} · nearby; drive time unverified"
+        return description
 
 
 # Units are mandatory: date/time ranges such as 10-12 must never become ages.
 _UNITS = r"(mies(?:iac(?:a|e|y)?|iec(?:y|e)?)?|months?|lat|lata|years?|rok|roku)"
 _RANGE = re.compile(r"(?<![\d:.,])(\d{1,3})\s*(?:-|–|—|do)\s*(\d{1,3})\s*" + _UNITS + r"\b", re.I)
 _MIN = re.compile(r"\bod\s+(\d{1,3})\s*" + _UNITS + r"\b", re.I)
-_PLUS = re.compile(r"\b(?:wiek|dzieci|kids|ages?)\s*[: ]*\s*(\d{1,2})\s*\+", re.I)
+_PLUS = re.compile(r"(?<![\w.,:])(\d{1,2})\s*\+(?!\w)", re.I)
 
 
 def _explicit_matches(text: str, prefs: FamilyPreferences) -> tuple[int, ...] | None:
@@ -108,13 +109,18 @@ def _validate_decision(data: dict, event: Event, page_text: str, prefs: FamilyPr
     reason = data.get("reason")
     if not isinstance(reason, str) or not reason.strip():
         raise ValueError("Classifier must explain suitability")
+    description = data.get("event_description", "")
+    if not isinstance(description, str) or (matches and not description.strip()):
+        raise ValueError("A matching event must have a factual event description")
+    description = re.sub(r"\s+", " ", description).strip()[:600]
     relevant = bool(matches) and location_verified and prefs.allows_locality(locality)
     if not location_verified:
         reason = "Event location could not be verified"
     elif not prefs.allows_locality(locality):
         reason = f"Outside configured Wrocław vicinity: {locality}"
     return ChildDecision(relevant, None, None, float(confidence), reason[:500],
-                         tuple(x for x in prefs.ages_months if x in matches), locality if location_verified else None)
+                         tuple(x for x in prefs.ages_months if x in matches), locality if location_verified else None,
+                         description)
 
 
 def _openai_classify(event: Event, page_text: str, prefs: FamilyPreferences) -> ChildDecision | None:
@@ -131,7 +137,13 @@ Find the actual physical event locality. Do not use the publisher's address, nav
 related events, or the fact that it came from a Wrocław feed as location evidence.
 Return suitable_ages_months (array containing only matching ages from {list(prefs.ages_months)}),
 locality (canonical Polish town/city name or null), location_evidence (verbatim excerpt
-containing that locality, or null), confidence (number 0..1), reason (brief English explanation).
+containing that locality, or null), confidence (number 0..1), reason (brief internal suitability explanation),
+event_description (1-3 concise English sentences, maximum 500 characters).
+event_description is the reader-facing description: explain WHAT HAPPENS at the event,
+including activities, format, theme and practical details explicitly supported by the page.
+Do not explain why it suits a 5-year-old or 18-month-old. Do not include comparisons between
+the children, suitability reasoning, "Suitable for", "Why", speculation, or invented facts.
+Keep explicit age restrictions in the description when stated by the organiser (e.g. ages 3+).
 Use canonical Polish locality names (e.g. Wrocław for 'we Wrocławiu'). Return ONLY a JSON object.
 
 TITLE: {event.title}
@@ -163,7 +175,8 @@ def classify_event(conn, session: requests.Session, event: Event, fingerprint: s
         extra = json.loads(cached["decision_json"])
         return ChildDecision(bool(cached["relevant"]), cached["age_min"], cached["age_max"],
                              cached["confidence"], cached["reason"],
-                             tuple(extra["suitable_ages_months"]), extra["locality"])
+                             tuple(extra["suitable_ages_months"]), extra["locality"],
+                             extra.get("event_description", ""))
     page_text = _fetch_event_context(session, event, verify_ssl)
     # Only explicit title ages and a named venue locality can bypass the LLM.
     matches = _explicit_matches(event.title, prefs)
@@ -183,5 +196,6 @@ def classify_event(conn, session: requests.Session, event: Event, fingerprint: s
     save_child_classification(conn, fingerprint, relevant=decision.relevant,
         age_min=decision.age_min, age_max=decision.age_max, confidence=decision.confidence,
         reason=decision.reason, policy_version=prefs.policy_version,
-        decision_json=json.dumps({"suitable_ages_months": decision.suitable_ages_months, "locality": decision.locality}))
+        decision_json=json.dumps({"suitable_ages_months": decision.suitable_ages_months,
+                                  "locality": decision.locality, "event_description": decision.event_description}))
     return decision

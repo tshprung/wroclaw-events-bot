@@ -86,6 +86,10 @@ class TelegramClient:
 
     def send_photo(self, chat_id: str, photo_url: str, *, caption: str | None = None) -> None:
         global _last_send_mono
+        # Keep the description and source URL intact instead of truncating a long caption.
+        if caption and len(caption) > 1024:
+            self.send_message(chat_id, caption)
+            return
         url = f"https://api.telegram.org/bot{self.token}/sendPhoto"
         payload = {
             "chat_id": chat_id,

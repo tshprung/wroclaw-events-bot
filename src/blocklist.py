@@ -126,7 +126,8 @@ def load_blocklist(path: Path | None = None) -> BlocklistConfig:
 
 def rule_matches(ev: Event, rule: BlockRule) -> bool:
     u = _fold_loc(unquote(ev.url or ""))
-    t = _fold_loc(ev.title or "")
+    # Old Krajownik rows can have a placeholder title and the real title in the card text.
+    t = _fold_loc(" ".join((ev.title or "", ev.raw_date_text or "")))
     v = _fold_loc(ev.venue or "")
 
     if rule.url_contains and rule.url_contains not in u:

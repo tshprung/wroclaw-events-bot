@@ -10,6 +10,7 @@ from urllib.parse import unquote, urlparse
 from rapidfuzz.fuzz import partial_ratio, token_set_ratio
 
 from .models import Event
+from .event_identity import event_title, normalize_event
 
 
 _SPACE_RE = re.compile(r"\s+")
@@ -32,7 +33,7 @@ _TITLE_TOKEN_RE = re.compile(r"\d+|[a-zA-ZąćęłńóśźżĄĆĘŁŃÓŚŹŻ]+
 
 def _fold(s: str) -> str:
     s = unicodedata.normalize("NFKD", (s or "").casefold())
-    return "".join(c for c in s if not unicodedata.combining(c))
+    return "".join(c for c in s if not unicodedata.combining(c)).replace("ł", "l")
 
 
 def _norm_match(s: str) -> str:
@@ -338,40 +339,8 @@ def _wroclaw_go_path_tail(url: str) -> tuple[str | None, str | None, str | None]
 
 
 def collapse_wroclaw_go_twin_listings(events: list[Event], local_tz: tzinfo) -> list[Event]:
-    """When the city site lists one performance under two numeric ids, keep a single row.
-
-    Groups by (category, first slug token, local calendar date). Prefer the URL whose
-    slug segment is longest (usually the fuller detail page).
-    """
-    groups: dict[tuple[str, str, date], list[tuple[int, Event]]] = defaultdict(list)
-    for i, e in enumerate(events):
-        cat, _eid, slug = _wroclaw_go_path_tail(e.url)
-        if not cat or not slug or not e.start_at:
-            continue
-        slug0 = slug.split("-")[0]
-        if len(slug0) < 4:
-            continue
-        d = e.start_at.astimezone(local_tz).date()
-        groups[(cat, slug0, d)].append((i, e))
-
-    drop_idx: set[int] = set()
-    for members in groups.values():
-        if len(members) <= 1:
-            continue
-
-        def score(it: tuple[int, Event]) -> tuple[int, int]:
-            _idx, ev = it
-            _c, _i, sl = _wroclaw_go_path_tail(ev.url)
-            return (len(sl or ""), len(ev.url or ""))
-
-        best_idx, _best_ev = max(members, key=score)
-        for idx, _ev in members:
-            if idx != best_idx:
-                drop_idx.add(idx)
-
-    if not drop_idx:
-        return events
-    return [e for i, e in enumerate(events) if i not in drop_idx]
+    """Collapse duplicate performance listings, retaining explicit age information."""
+    return collapse_event_occurrences(events, local_tz)
 
 
 def is_same_show_cross_source(a: Event, b: Event) -> bool:
@@ -416,26 +385,71 @@ def is_same_show_cross_source(a: Event, b: Event) -> bool:
 
 def should_skip_cross_source_duplicate(ev: Event, seen: list[Event], local_tz: tzinfo) -> bool:
     """Skip when an event already ingested this run matches the same show (other site / URL)."""
-    d_ev = _event_local_date(ev, local_tz)
-    for r in seen:
-        d_r = _event_local_date(r, local_tz)
-        if d_ev is not None and d_r is not None and d_ev != d_r:
+    return any(same_event_occurrence(ev, other, local_tz) for other in seen)
+
+
+def _identity_title(ev: Event) -> str:
+    title = _fold(event_title(ev))
+    # Age badges are metadata, not part of a show's name. Preserve other numbers.
+    title = re.sub(r"\b\d{1,2}\s*\+", " ", title)
+    title = re.sub(r"\b\d{1,2}\s*[- ]plus\b", " ", title)
+    title = re.sub(r"\b(?:dla dzieci )?od \d{1,2} (?:lat|roku zycia)\b", " ", title)
+    return " ".join(re.findall(r"[a-z0-9]+", title))
+
+
+def _occurrence_when(ev: Event, local_tz: tzinfo):
+    from .event_window import resolve_when
+    return resolve_when(normalize_event(ev), datetime.now(local_tz))
+
+
+def same_event_occurrence(a: Event, b: Event, local_tz: tzinfo) -> bool:
+    """Same title, venue and performance time; never merge distinct known showtimes."""
+    ra, rb = _occurrence_when(a, local_tz), _occurrence_when(b, local_tz)
+    if ra is None or rb is None or ra.day != rb.day:
+        return False
+    if ra.tm is None or rb.tm is None or ra.tm != rb.tm:
+        return False
+    ta, tb = _identity_title(a), _identity_title(b)
+    if not ta or not tb:
+        return False
+    # A numbered sequel or part must not merge into its neighbour.
+    if re.findall(r"\d+", ta) != re.findall(r"\d+", tb):
+        return False
+    exact = ta == tb
+    expressive_short_title = (" " not in ta and " " not in tb and
+        re.sub(r"([aeiouy])\1+", r"\1", ta) == re.sub(r"([aeiouy])\1+", r"\1", tb))
+    if not (exact or expressive_short_title):
+        if min(len(ta), len(tb)) < 18 or token_set_ratio(ta, tb) < 94:
+            return False
+        # token_set_ratio alone would collapse an event into a different longer title.
+        from rapidfuzz.fuzz import ratio
+        if ratio(ta, tb) < 92:
+            return False
+    va = _norm_match(normalize_event(a).venue or "")
+    vb = _norm_match(normalize_event(b).venue or "")
+    if not va or not vb:
+        # Short titles need venue evidence; long exact titles + exact times can stand alone.
+        return exact and len(ta) >= 24
+    return token_set_ratio(va, vb) >= 85
+
+
+def collapse_event_occurrences(events: list[Event], local_tz: tzinfo) -> list[Event]:
+    """Prefer explicit age-labelled listings, then structured dates and venues."""
+    def quality(ev: Event):
+        age_badge = bool(re.search(r"\d\s*\+|\bod\s+\d+\s+lat\b", event_title(ev), re.I))
+        return (age_badge, ev.start_at is not None, bool(ev.venue), not ev.title.startswith("Wydarzenie ("))
+    kept: list[Event] = []
+    buckets: dict[tuple, list[Event]] = defaultdict(list)
+    for ev in sorted(events, key=quality, reverse=True):
+        when = _occurrence_when(ev, local_tz)
+        if when is None or when.tm is None:
+            kept.append(ev)
             continue
-        if d_ev is None and d_r is None:
-            continue
-        if not (is_same_show_cross_source(ev, r) or is_same_show_cross_source(r, ev)):
-            continue
-        # wydarzenia.wroclaw.pl often has no date in the anchor; Krajownik has "12 Kwietnia …".
-        if (d_ev is None) ^ (d_r is None):
-            ta, tb = _norm_match(ev.title), _norm_match(r.title)
-            lo, sh = (ta, tb) if len(ta) >= len(tb) else (tb, ta)
-            pr = max(partial_ratio(lo, sh), partial_ratio(sh, lo))
-            if pr < 48:
-                continue
-            if pr < 62 and token_set_ratio(ta, tb) < 42:
-                continue
-        return True
-    return False
+        bucket = buckets[(when.day, when.tm)]
+        if not should_skip_cross_source_duplicate(ev, bucket, local_tz):
+            kept.append(ev)
+            bucket.append(ev)
+    return kept
 
 
 def _wroclaw_go_text_slug(url: str) -> str | None:

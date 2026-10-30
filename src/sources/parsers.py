@@ -14,6 +14,7 @@ from dateutil import tz as dttz
 from rapidfuzz.fuzz import partial_ratio, token_set_ratio, token_sort_ratio
 
 from ..models import Event, Source
+from ..event_identity import normalize_event
 from .common import extract_links, soup
 
 
@@ -669,14 +670,14 @@ def parse_krajownik_wroclaw_wydarzenia(source: Source, html: str) -> list[Event]
     out: list[Event] = []
     for u, rec in by_url.items():
         out.append(
-            Event(
+            normalize_event(Event(
                 source_id=source.id,
                 title=rec.get("title") or "Wydarzenie (Krajownik)",
                 start_at=None,
                 venue=rec.get("venue") or None,
                 url=u,
                 raw_date_text=rec.get("when") or None,
-            )
+            ))
         )
     return out
 

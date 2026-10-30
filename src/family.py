@@ -23,7 +23,7 @@ class FamilyPreferences:
 
     @property
     def policy_version(self) -> str:
-        payload = json.dumps(["family-v2", self.ages_months, self.nearby_localities])
+        payload = json.dumps(["family-v3-description-age-badges", self.ages_months, self.nearby_localities])
         return hashlib.sha256(payload.encode()).hexdigest()[:20]
 
     def allows_locality(self, locality: str | None) -> bool:
