@@ -12,6 +12,7 @@ from src.blocklist import event_blocked, load_blocklist
 from src.child_filter import ChildDecision, _explicit_matches, _validate_decision, classify_event
 from src.dedupe import collapse_event_occurrences, collapse_wroclaw_go_twin_listings, fingerprint, should_skip_cross_source_duplicate
 from src.event_identity import normalize_event
+from src.exclusions import event_is_excluded
 from src.family import load_family_preferences
 from src.main import _format_family_event, _maybe_send_upcoming_digest
 from src.models import Event, Source
@@ -96,6 +97,52 @@ class IdentityTests(unittest.TestCase):
 
 
 class SeriesAndDescriptionTests(unittest.TestCase):
+    def test_all_reported_cinema_screenings_are_excluded(self):
+        examples = [
+            ('Poranek Familijny | Kino Sferyczne', '1418280-poranek-familijny-kino-sferyczne'),
+            ('Niesamowite przygody skarpetek 4. Do roboty - premierowe seanse z konkursami HDD',
+             '1418327-niesamowite-przygody-skarpetek-4-do-roboty-premierowe-seanse-z-konkursami-hdd'),
+            ('Przepis na święta', '1418074-przepis-na-swieta'),
+        ]
+        for title, slug in examples:
+            ev = replace(PARADE, title=title, url='https://www.wroclaw.pl/go/wydarzenia/kino/' + slug)
+            with self.subTest(title=title):
+                self.assertTrue(event_is_excluded(ev))
+                with patch('src.child_filter._fetch_event_context') as fetch:
+                    self.assertFalse(classify_event(None, Mock(), ev, 'legacy-cached-movie').relevant)
+                    fetch.assert_not_called()
+
+    def test_screening_markers_on_other_sources_are_excluded(self):
+        for title in ['Poranek Familijny | Kino Sferyczne', 'Premierowe seanse z konkursami',
+                      'Pokaz filmów familijnych', 'Projekcja filmu dla dzieci', 'Family film screening']:
+            ev = replace(PARADE, title=title, url='https://example.org/event')
+            self.assertTrue(event_is_excluded(ev), title)
+        self.assertTrue(event_is_excluded(replace(CARD, raw_date_text='Rodzinne seanse z konkursami 7 Listopada 2026')))
+
+    def test_ambiguous_movie_title_is_rejected_by_classifier(self):
+        data = dict(is_cinema_screening=True, suitable_ages_months=[60], locality='Wrocław',
+            location_evidence='Wrocław', confidence=0.99, reason='Family-friendly film',
+            event_description='A family film screening at Cinema City.')
+        result = _validate_decision(data, replace(PARADE, title='Przepis na święta'), 'Wrocław', load_family_preferences())
+        self.assertFalse(result.relevant)
+        self.assertIn('Cinema screenings', result.reason)
+
+    def test_actual_filmmaking_workshop_is_not_a_screening(self):
+        ev = replace(PARADE, title='Warsztaty tworzenia filmów dla dzieci', venue='Kino Nowe Horyzonty',
+                     url='https://example.org/workshop')
+        self.assertFalse(event_is_excluded(ev))
+        data = dict(is_cinema_screening=False, suitable_ages_months=[60], locality='Wrocław',
+            location_evidence='Wrocław', confidence=0.9, reason='Hands-on workshop',
+            event_description='Children create their own stop-motion animations.')
+        self.assertTrue(_validate_decision(data, ev, 'Wrocław', load_family_preferences()).relevant)
+
+    def test_classifier_cinema_flag_must_be_boolean(self):
+        data = dict(suitable_ages_months=[60], locality='Wrocław', location_evidence='Wrocław',
+                    confidence=0.9, reason='Workshop', event_description='Hands-on craft workshop.')
+        for bad in [None, 'false', 0]:
+            with self.subTest(value=bad), self.assertRaises(ValueError):
+                _validate_decision(dict(data, is_cinema_screening=bad), PARADE, 'Wrocław', load_family_preferences())
+
     def test_blocks_both_series_across_sources_and_future_weeks(self):
         cfg = load_blocklist()
         titles = ['Bezpłatne zajęcia ogólnorozwojowe z elementami koszykówki dla dzieci od 2 roku życia',
@@ -132,12 +179,12 @@ class SeriesAndDescriptionTests(unittest.TestCase):
     def test_standalone_age_badge_excludes_toddler(self):
         prefs = load_family_preferences()
         self.assertEqual(_explicit_matches(BAAACH.title, prefs), (60,))
-        data = dict(suitable_ages_months=[18, 60], locality='Wrocław', location_evidence='Wrocław',
+        data = dict(is_cinema_screening=False, suitable_ages_months=[18, 60], locality='Wrocław', location_evidence='Wrocław',
                     confidence=0.9, reason='Model thinks both children fit', event_description='A theatre performance for ages 3+.')
         self.assertEqual(_validate_decision(data, BAAACH, 'Wrocław', prefs).suitable_ages_months, (60,))
 
     def test_description_required_for_positive_classifier_result(self):
-        data = dict(suitable_ages_months=[60], locality='Wrocław', location_evidence='Wrocław', confidence=0.9, reason='Fits')
+        data = dict(is_cinema_screening=False, suitable_ages_months=[60], locality='Wrocław', location_evidence='Wrocław', confidence=0.9, reason='Fits')
         with self.assertRaises(ValueError):
             _validate_decision(data, PARADE, 'Wrocław', load_family_preferences())
 

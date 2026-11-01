@@ -72,7 +72,7 @@ class FamilyTests(unittest.TestCase):
         self.assertEqual(load_family_preferences().ages_months, (18, 60))
 
     def decision(self, **updates):
-        data = dict(suitable_ages_months=[60], locality="Wrocław", location_evidence="Wrocław",
+        data = dict(is_cinema_screening=False, suitable_ages_months=[60], locality="Wrocław", location_evidence="Wrocław",
                     confidence=0.9, reason="Workshop explicitly for preschool children", event_description="A hands-on craft workshop.")
         data.update(updates)
         return _validate_decision(data, event(), "", PREFS)
@@ -83,7 +83,7 @@ class FamilyTests(unittest.TestCase):
         self.assertFalse(self.decision(suitable_ages_months=[]).relevant)
 
     def test_nearby_and_distant_localities(self):
-        data = dict(suitable_ages_months=[18], locality="Siechnice", location_evidence="Siechnice",
+        data = dict(is_cinema_screening=False, suitable_ages_months=[18], locality="Siechnice", location_evidence="Siechnice",
                     confidence=0.9, reason="Toddler activity", event_description="A sensory play session.")
         match = _validate_decision(data, event(venue="Siechnice"), "", PREFS)
         self.assertTrue(match.relevant)
@@ -92,18 +92,18 @@ class FamilyTests(unittest.TestCase):
         self.assertFalse(_validate_decision(data, event(venue="Warszawa"), "", PREFS).relevant)
 
     def test_default_event_city_does_not_prove_location(self):
-        data = dict(suitable_ages_months=[60], locality="Wrocław", location_evidence="Wrocław",
+        data = dict(is_cinema_screening=False, suitable_ages_months=[60], locality="Wrocław", location_evidence="Wrocław",
                     confidence=0.9, reason="Workshop", event_description="A hands-on craft workshop.")
         self.assertFalse(_validate_decision(data, event(venue=None), "", PREFS).relevant)
 
     def test_invalid_classifier_types_rejected(self):
-        for data in [dict(suitable_ages_months=[True]), dict(suitable_ages_months=[19]),
+        for data in [dict(is_cinema_screening=False, suitable_ages_months=[True]), dict(is_cinema_screening=False, suitable_ages_months=[19]),
                      dict(confidence="high"), dict(confidence=float("nan")), dict(reason="")]:
             with self.subTest(data=data), self.assertRaises(ValueError):
                 self.decision(**data)
 
     def test_title_age_restriction_overrides_model_match(self):
-        data = dict(suitable_ages_months=[18, 60], locality="Wrocław", location_evidence="Wrocław",
+        data = dict(is_cinema_screening=False, suitable_ages_months=[18, 60], locality="Wrocław", location_evidence="Wrocław",
                     confidence=0.9, reason="Workshop", event_description="A hands-on craft workshop.")
         result = _validate_decision(data, event(title="Warsztaty 3-6 lat"), "", PREFS)
         self.assertEqual(result.suitable_ages_months, (60,))

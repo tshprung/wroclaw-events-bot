@@ -24,6 +24,10 @@ Collect upcoming events in Wrocław from ~30 **HTTP-only** sources (no login/cap
   No weekday, nap, price, or language restrictions are applied.
 - Theatre, concerts, and museum activities are evaluated for child suitability;
   they are no longer rejected simply because of their category or venue.
+- Cinema/film screenings are excluded, including family cinema mornings, dome/spherical
+  cinema, and screenings bundled with quizzes or competitions. Known cinema-category URLs
+  and screening titles are blocked before classification; ambiguous listings from other
+  sources are checked using the event page. Participatory filmmaking workshops remain eligible.
 - The configurable nearby-locality list approximates the Wrocław vicinity.
   **It is not a verified 30-minute driving radius.** Travel time depends on the
   departure point and traffic; nearby results explicitly say drive time is unverified.

@@ -300,7 +300,22 @@ def _wroclaw_go_zestawienia_url(url: str) -> bool:
     return "/go/zestawienia/" in path
 
 
+def event_is_cinema_screening(ev: Event) -> bool:
+    """High-confidence screening markers; ambiguous film titles are classified from the page."""
+    path = urlparse(ev.url or "").path.casefold()
+    if "/go/wydarzenia/kino/" in path:
+        return True
+    text = _fold_loc(" ".join((ev.title or "", ev.raw_date_text or "", unquote(path).replace("-", " "))))
+    return bool(re.search(
+        r"\bkino sferyczne\b|\bseans(?:e|ow|u|ie|em|ami|ach|y)?\b|"
+        r"\b(?:pokaz\w*|projekcj\w*)\s+film\w*\b|\b(?:film|cinema|dome)\s+screenings?\b",
+        text,
+    ))
+
+
 def event_is_excluded(ev: Event) -> bool:
+    if event_is_cinema_screening(ev):
+        return True
     u_raw = (ev.url or "").strip()
     if not u_raw.lower().startswith("https://"):
         return True
